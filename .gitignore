@@ -1,0 +1,23 @@
+node_modules/
+.DS_Store
+.env
+.env.local
+
+# hardhat
+contracts/artifacts/
+contracts/cache/
+contracts/types/
+contracts/coverage/
+contracts/coverage.json
+contracts/deployments/localhost/
+contracts/fhevmTemp/
+
+# next
+web/.next/
+web/out/
+web/.vercel/
+
+# scratch
+*.log
+contracts/fhevmTemp/
+docs/.season-4-plan.md.bak
