@@ -8,7 +8,11 @@ import type { HardhatUserConfig } from "hardhat/config";
 import { vars } from "hardhat/config";
 
 const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test junk");
-const SEPOLIA_RPC_URL: string = vars.get("SEPOLIA_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com");
+const INFURA_API_KEY: string = vars.get("INFURA_API_KEY", "");
+const SEPOLIA_RPC_URL: string = vars.get(
+  "SEPOLIA_RPC_URL",
+  INFURA_API_KEY ? `https://sepolia.infura.io/v3/${INFURA_API_KEY}` : "https://ethereum-sepolia-rpc.publicnode.com",
+);
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",

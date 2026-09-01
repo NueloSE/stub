@@ -4,7 +4,7 @@ import { FhevmType } from "@fhevm/hardhat-plugin";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
-import type { MockYieldSource, StubPool, StubUSD, TestUSD } from "../types";
+import type { MockConfidentialUSDC, MockUSDC, MockYieldSource, StubPool } from "../types";
 
 const DRAW_INTERVAL = 60 * 60; // 1 hour
 const MAX_UINT48 = 281474976710655n;
@@ -15,21 +15,20 @@ describe("StubPool", function () {
   let owner: HardhatEthersSigner;
   let alice: HardhatEthersSigner;
   let bob: HardhatEthersSigner;
-  let usd: TestUSD;
-  let cusd: StubUSD;
+  let usd: MockUSDC;
+  let cusd: MockConfidentialUSDC;
   let yieldSource: MockYieldSource;
   let pool: StubPool;
 
   beforeEach(async function () {
     [owner, alice, bob] = await ethers.getSigners();
 
-    usd = (await (await ethers.getContractFactory("TestUSD")).deploy(owner.address)) as TestUSD;
+    usd = (await (await ethers.getContractFactory("MockUSDC")).deploy()) as MockUSDC;
     await usd.waitForDeployment();
 
-    cusd = (await (await ethers.getContractFactory("StubUSD")).deploy(
+    cusd = (await (await ethers.getContractFactory("MockConfidentialUSDC")).deploy(
       await usd.getAddress(),
-      "https://stub.example/token",
-    )) as StubUSD;
+    )) as MockConfidentialUSDC;
     await cusd.waitForDeployment();
 
     yieldSource = (await (await ethers.getContractFactory("MockYieldSource")).deploy(
@@ -49,7 +48,7 @@ describe("StubPool", function () {
     await (await yieldSource.setPool(await pool.getAddress())).wait();
     await (await pool.setYieldSource(await yieldSource.getAddress())).wait();
 
-    // Fund the prize reserve.
+    // Fund the prize reserve from the same public mint judges will use.
     await (await usd.mint(owner.address, 100_000e6)).wait();
     await (await usd.approve(await yieldSource.getAddress(), 100_000e6)).wait();
     await (await yieldSource.fund(50_000e6)).wait();
@@ -57,7 +56,7 @@ describe("StubPool", function () {
 
   /** Faucet -> wrap -> grant the pool operator rights -> deposit an encrypted amount. */
   async function joinPool(who: HardhatEthersSigner, amount: bigint) {
-    await (await usd.connect(who).faucet()).wait();
+    await (await usd.connect(who).mint(who.address, amount)).wait();
     await (await usd.connect(who).approve(await cusd.getAddress(), amount)).wait();
     await (await cusd.connect(who).wrap(who.address, amount)).wait();
     await (await cusd.connect(who).setOperator(await pool.getAddress(), MAX_UINT48)).wait();

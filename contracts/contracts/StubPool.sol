@@ -9,7 +9,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {CheckpointsConfidential} from
     "@openzeppelin/confidential-contracts/utils/structs/CheckpointsConfidential.sol";
 
-import {StubUSD} from "./token/StubUSD.sol";
+import {IERC7984ERC20Wrapper} from
+    "@openzeppelin/confidential-contracts/interfaces/IERC7984ERC20Wrapper.sol";
 import {IYieldSource} from "./interfaces/IYieldSource.sol";
 
 /**
@@ -62,8 +63,16 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     // Storage
     // -------------------------------------------------------------------------------------
 
-    /// @notice The confidential token this pool accepts.
-    StubUSD public immutable token;
+    /**
+     * @notice The confidential token this pool accepts.
+     * @dev    On Sepolia this is Zama's own `Confidential USDC (Mock)`
+     *         (`0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639`) — an upgradeable
+     *         `ERC7984ERC20Wrapper` listed in their Wrappers Registry, whose underlying carries a
+     *         public `mint`. Stub deploys no token of its own: judges get the asset from the
+     *         sponsor's contract, and our audit surface stays down to this pool and its yield
+     *         source. Held as an interface so the Hardhat suite can point at a local clone.
+     */
+    IERC7984ERC20Wrapper public immutable token;
 
     /// @notice Where the prize comes from.
     IYieldSource public yieldSource;
@@ -122,7 +131,11 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     // Construction
     // -------------------------------------------------------------------------------------
 
-    constructor(StubUSD token_, uint256 drawInterval_, address initialOwner) Ownable(initialOwner) {
+    constructor(
+        IERC7984ERC20Wrapper token_,
+        uint256 drawInterval_,
+        address initialOwner
+    ) Ownable(initialOwner) {
         token = token_;
         drawInterval = drawInterval_;
         lastSealedAt = block.timestamp;

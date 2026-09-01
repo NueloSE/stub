@@ -9,19 +9,22 @@ import {ERC7984ERC20Wrapper} from
     "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984ERC20Wrapper.sol";
 
 /**
- * @title  StubUSD
- * @notice The confidential form of {TestUSD}. Wrapping is where the confidentiality boundary
- *         sits: the wrap amount is public, everything after it is not.
- * @dev    Thin concrete instance of OpenZeppelin's ERC-7984 wrapper. Unwrapping is a two-step
- *         request/finalize flow — see {ERC7984ERC20Wrapper-finalizeUnwrap}. A request that is
- *         made but never finalized strands the underlying, which is the failure mode the app
- *         has to detect and offer to complete.
+ * @title  MockConfidentialUSDC
+ * @notice Local stand-in for Zama's `Confidential USDC (Mock)` on Sepolia
+ *         (`0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639`).
+ *
+ * @dev    Same reason as {MockUSDC}: the Hardhat suite needs a wrapper it can deploy. **Never
+ *         deployed to a live network.** Zama's is an upgradeable `ERC7984ERC20Wrapper` behind a
+ *         proxy, registered in their Wrappers Registry, and every function {StubPool} calls was
+ *         checked against its deployed bytecode before we committed to it.
+ *
+ *         Wrapping is the confidentiality boundary. `wrap` takes a public amount — that step is
+ *         readable by anyone. Everything downstream of it is not.
  */
-contract StubUSD is ERC7984, ERC7984ERC20Wrapper, ZamaEthereumConfig {
+contract MockConfidentialUSDC is ERC7984, ERC7984ERC20Wrapper, ZamaEthereumConfig {
     constructor(
-        IERC20 underlying_,
-        string memory contractURI_
-    ) ERC7984("Stub USD", "cUSD", contractURI_) ERC7984ERC20Wrapper(underlying_) {}
+        IERC20 underlying_
+    ) ERC7984("Confidential USDC (Mock)", "cUSDCMock", "") ERC7984ERC20Wrapper(underlying_) {}
 
     function decimals() public view override(ERC7984, ERC7984ERC20Wrapper) returns (uint8) {
         return ERC7984ERC20Wrapper.decimals();
