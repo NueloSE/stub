@@ -35,6 +35,14 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: false,
       blockGasLimit: 30_000_000,
     },
+    localhost: {
+      accounts: {
+        mnemonic: MNEMONIC,
+        count: 20,
+      },
+      chainId: 31337,
+      url: "http://127.0.0.1:8545",
+    },
     sepolia: {
       accounts: {
         mnemonic: MNEMONIC,

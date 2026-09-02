@@ -254,30 +254,108 @@ describe("StubPool", function () {
     });
   });
 
-  describe("claim", function () {
-    it("moves winnings out and costs the same whether or not you won", async function () {
+  describe("HCU budget", function () {
+    /**
+     * Gas is only half the budget on FHEVM. Every encrypted operation also burns HCU, metered
+     * against a 20,000,000 per-transaction ceiling and a 5,000,000 sequential-depth ceiling.
+     * Exceeding either reverts. These are the numbers the README quotes, measured rather than
+     * derived from the published cost table.
+     */
+    const GLOBAL_LIMIT = 20_000_000;
+    const DEPTH_LIMIT = 5_000_000;
+
+    it("keeps every operation far inside the per-transaction ceilings", async function () {
       await joinPool(alice, 600e6);
       await joinPool(bob, 400e6);
-      const { drawId, settled } = await runDraw();
+      const { drawId } = await runDraw();
 
+      const openReceipt = await (await pool.openStub(drawId, alice.address)).wait();
+      const claimReceipt = await (await pool.connect(alice).claim()).wait();
+
+      const encrypted = await fhevm
+        .createEncryptedInput(await pool.getAddress(), alice.address)
+        .add64(600e6)
+        .encrypt();
+      const withdrawReceipt = await (
+        await pool.connect(alice).withdraw(encrypted.handles[0], encrypted.inputProof)
+      ).wait();
+
+      const measured = [
+        ["openStub", openReceipt],
+        ["claim", claimReceipt],
+        ["withdraw", withdrawReceipt],
+      ] as const;
+
+      for (const [label, receipt] of measured) {
+        const hcu = fhevm.computeTransactionHCU(receipt!);
+        const pct = ((hcu.globalHCU / GLOBAL_LIMIT) * 100).toFixed(2);
+        console.log(
+          `      ${label.padEnd(9)} ${hcu.globalHCU.toLocaleString().padStart(10)} HCU ` +
+            `(${pct.padStart(5)}% of ceiling)  depth ${hcu.maxHCUDepth.toLocaleString()}`,
+        );
+        expect(hcu.globalHCU).to.be.lessThan(GLOBAL_LIMIT);
+        expect(hcu.maxHCUDepth).to.be.lessThan(DEPTH_LIMIT);
+      }
+    });
+
+    it("costs the same to open a stub whether the account won or lost", async function () {
+      await joinPool(alice, 600e6);
+      await joinPool(bob, 400e6);
+      const { drawId } = await runDraw();
+
+      const a = fhevm.computeTransactionHCU((await (await pool.openStub(drawId, alice.address)).wait())!);
+      const b = fhevm.computeTransactionHCU((await (await pool.openStub(drawId, bob.address)).wait())!);
+
+      console.log(`      alice ${a.globalHCU.toLocaleString()} HCU, bob ${b.globalHCU.toLocaleString()} HCU`);
+      expect(a.globalHCU).to.equal(b.globalHCU, "HCU must not vary with the outcome either");
+    });
+  });
+
+  describe("claim", function () {
+    it("moves winnings out, and looks identical whether or not you won", async function () {
+      await joinPool(alice, 600e6);
+      await joinPool(bob, 400e6);
+
+      // Claim once with nothing owed. This warms each account's storage so the comparison
+      // below measures the operation rather than who happened to transact first — the first
+      // caller pays cold-access costs on the token, the ACL and the executor.
+      await (await pool.connect(alice).claim()).wait();
+      await (await pool.connect(bob).claim()).wait();
+
+      const { drawId, settled } = await runDraw();
       await (await pool.openStub(drawId, alice.address)).wait();
       await (await pool.openStub(drawId, bob.address)).wait();
 
-      const before = {
+      const owed = {
         alice: await decrypt64(await pool.confidentialWinningsOf(alice.address), alice),
         bob: await decrypt64(await pool.confidentialWinningsOf(bob.address), bob),
       };
 
-      const aliceGas = (await (await pool.connect(alice).claim()).wait())!.gasUsed;
-      const bobGas = (await (await pool.connect(bob).claim()).wait())!.gasUsed;
+      const aliceReceipt = (await (await pool.connect(alice).claim()).wait())!;
+      const bobReceipt = (await (await pool.connect(bob).claim()).wait())!;
 
+      // Exactly one of them should be holding the prize.
+      expect(owed.alice + owed.bob).to.equal(settled.prize * BigInt(Number(owed.alice > 0n) + Number(owed.bob > 0n)));
       for (const who of [alice, bob]) {
         expect(await decrypt64(await pool.confidentialWinningsOf(who.address), who)).to.equal(0n);
       }
 
-      const spread = aliceGas > bobGas ? aliceGas - bobGas : bobGas - aliceGas;
-      expect(Number(spread)).to.be.lessThan(5_000, "claiming nothing must look like claiming a prize");
-      expect(before.alice + before.bob).to.equal(settled.prize * BigInt(before.alice > 0n || before.bob > 0n ? 1 : 0));
+      // The property that matters: the encrypted work is identical, so the coprocessor cannot
+      // distinguish a winner from a loser either.
+      const aliceHCU = fhevm.computeTransactionHCU(aliceReceipt);
+      const bobHCU = fhevm.computeTransactionHCU(bobReceipt);
+      console.log(
+        `      claim HCU  alice ${aliceHCU.globalHCU.toLocaleString()}  bob ${bobHCU.globalHCU.toLocaleString()}` +
+          `   (alice won: ${owed.alice > 0n})`,
+      );
+      expect(aliceHCU.globalHCU).to.equal(bobHCU.globalHCU, "HCU must not vary with the outcome");
+
+      const gasSpread =
+        aliceReceipt.gasUsed > bobReceipt.gasUsed
+          ? aliceReceipt.gasUsed - bobReceipt.gasUsed
+          : bobReceipt.gasUsed - aliceReceipt.gasUsed;
+      console.log(`      claim gas spread once warm: ${gasSpread}`);
+      expect(Number(gasSpread)).to.be.lessThan(5_000, "claiming nothing must look like claiming a prize");
     });
   });
 });
