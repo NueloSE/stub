@@ -27,9 +27,12 @@ const config: HardhatUserConfig = {
     apiKey: vars.get("ETHERSCAN_API_KEY", ""),
   },
   sourcify: {
-    // Needs no API key. Etherscan's UI is what a judge reads, so this is belt-and-braces rather
-    // than a replacement — but it makes the source independently checkable either way.
-    enabled: true,
+    // Off. With this on, `verify` runs Etherscan and then Sourcify, and Sourcify's legacy
+    // endpoint answers with an HTML error page rather than JSON — which surfaces as a thrown
+    // "Unexpected token '<'" *after* Etherscan has already succeeded, making a clean
+    // verification look like a failure. Etherscan's UI is what a judge opens anyway. The
+    // standalone `sourcify` task is still there if we want it later.
+    enabled: false,
   },
   networks: {
     hardhat: {
