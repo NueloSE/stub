@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import {FHE, euint64, euint256, ebool, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {CheckpointsConfidential} from
@@ -49,6 +50,10 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         /// @dev Prize for this draw, in cUSD units. Public: it is a property of the pool, not
         ///      of a person, and the yield that funds it is observable anyway.
         uint64 prize;
+        /// @dev When the draw was sealed. Starts the settlement window.
+        uint64 sealedAt;
+        /// @dev Set if the draw was voided because settlement never arrived.
+        bool isVoid;
         /// @dev Pool total at the seal, once publicly decrypted. The odds denominator.
         uint64 totalAtSeal;
         /// @dev Protocol randomness for this draw, once publicly decrypted.
@@ -80,6 +85,9 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     /// @notice Minimum time between seals.
     uint256 public drawInterval;
 
+    /// @notice How long a sealed draw may wait for settlement before anyone may void it.
+    uint256 public constant SETTLEMENT_WINDOW = 24 hours;
+
     /// @notice When the current draw became sealable.
     uint256 public lastSealedAt;
 
@@ -94,6 +102,10 @@ contract StubPool is ZamaEthereumConfig, Ownable {
 
     /// @dev Running encrypted pool total. Published only at a seal.
     euint64 private _total;
+
+    /// @notice Prize from voided draws, waiting to be added to the next one. Nothing is lost
+    ///         when a draw is abandoned; it arrives a draw later.
+    uint64 public rolloverPrize;
 
     /// @dev Sealed per-draw outcome. Decryptable only by its owner.
     mapping(uint64 drawId => mapping(address account => ebool)) private _stub;
@@ -116,6 +128,8 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     error EmptyPool();
     error StubAlreadyOpened(uint64 drawId, address account);
     error NoYieldSource();
+    error SettlementWindowOpen(uint256 voidableAt);
+    error DrawVoided(uint64 drawId);
 
     event Deposited(address indexed account, uint48 blockNumber);
     event Withdrawn(address indexed account, uint48 blockNumber);
@@ -123,6 +137,7 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         uint64 indexed drawId, uint48 sealBlock, uint64 prize, bytes32 seedHandle, bytes32 totalHandle
     );
     event DrawSettled(uint64 indexed drawId, uint256 seed, uint64 totalAtSeal);
+    event DrawVoid(uint64 indexed drawId, uint64 prizeRolledOver);
     event StubOpened(uint64 indexed drawId, address indexed account, uint64 ticket);
     event Claimed(address indexed account);
     event YieldSourceUpdated(address yieldSource);
@@ -229,7 +244,8 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         if (block.timestamp < readyAt) revert DrawNotReady(readyAt);
         if (address(yieldSource) == address(0)) revert NoYieldSource();
 
-        uint64 prize = _harvestPrize();
+        uint64 prize = _harvestPrize() + rolloverPrize;
+        rolloverPrize = 0;
 
         euint256 seed = FHE.randEuint256();
         FHE.allowThis(seed);
@@ -240,6 +256,7 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         FHE.makePubliclyDecryptable(total);
 
         d.isSealed = true;
+        d.sealedAt = uint64(block.timestamp);
         d.sealBlock = uint48(block.number);
         d.prize = prize;
         d.seedHandle = euint256.unwrap(seed);
@@ -281,6 +298,42 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     }
 
     /**
+     * @notice Abandon a sealed draw that was never settled, and let the pool move on.
+     *
+     * @dev    Without this the pool bricks. `sealDraw` refuses to re-seal a sealed draw and
+     *         `currentDrawId` only advances in {settleDraw}, so a draw whose decryption never
+     *         arrives — a relayer outage long enough to matter, a handle that stops being
+     *         served — would freeze every future draw permanently. Deposits and withdrawals
+     *         would keep working and nobody could ever win again.
+     *
+     *         Permissionless, and only after {SETTLEMENT_WINDOW}. Settling is already
+     *         permissionless and takes seconds, so anyone who wants the draw to complete has a
+     *         full day to make it complete. The window is what stops this being a censorship
+     *         tool: you cannot void a draw someone is about to settle.
+     *
+     *         The prize is not lost. It stays in the pool's balance and is added to the next
+     *         draw's prize, so the yield reaches depositors a draw later than intended.
+     */
+    function voidDraw() external returns (uint64 drawId) {
+        drawId = currentDrawId;
+        Draw storage d = _draws[drawId];
+        if (!d.isSealed) revert DrawNotSealed(drawId);
+        if (d.isSettled) revert DrawAlreadySettled(drawId);
+
+        uint256 voidableAt = d.sealedAt + SETTLEMENT_WINDOW;
+        if (block.timestamp < voidableAt) revert SettlementWindowOpen(voidableAt);
+
+        d.isVoid = true;
+        d.isSettled = true;
+        uint64 rolled = d.prize;
+        d.prize = 0;
+        rolloverPrize += rolled;
+        currentDrawId = drawId + 1;
+
+        emit DrawVoid(drawId, rolled);
+    }
+
+    /**
      * @notice Open one account's stub for a settled draw, and credit any winnings.
      * @dev    This is the entire winner-selection computation, and it is O(1). Always succeeds,
      *         always costs the same, and writes an encrypted result — an observer watching the
@@ -290,6 +343,7 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     function openStub(uint64 drawId, address account) external returns (ebool won) {
         Draw storage d = _draws[drawId];
         if (!d.isSettled) revert DrawNotSettled(drawId);
+        if (d.isVoid) revert DrawVoided(drawId);
         if (stubOpened[drawId][account]) revert StubAlreadyOpened(drawId, account);
         stubOpened[drawId][account] = true;
 
@@ -369,12 +423,20 @@ contract StubPool is ZamaEthereumConfig, Ownable {
     function ticketOf(uint64 drawId, address account) external view returns (uint64) {
         Draw storage d = _draws[drawId];
         if (!d.isSettled) revert DrawNotSettled(drawId);
+        if (d.isVoid) revert DrawVoided(drawId);
         return _ticket(d.seed, drawId, d.totalAtSeal, account);
     }
 
     /// @notice When the current draw may next be sealed.
     function sealableAt() external view returns (uint256) {
         return lastSealedAt + drawInterval;
+    }
+
+    /// @notice When the current sealed draw could be abandoned, or zero if that does not apply.
+    function voidableAt() external view returns (uint256) {
+        Draw storage d = _draws[currentDrawId];
+        if (!d.isSealed || d.isSettled) return 0;
+        return d.sealedAt + SETTLEMENT_WINDOW;
     }
 
     // -------------------------------------------------------------------------------------
@@ -404,7 +466,7 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         underlying.forceApprove(address(token), harvested);
         token.wrap(address(this), harvested);
 
-        return uint64(harvested / token.rate());
+        return SafeCast.toUint64(harvested / token.rate());
     }
 
     /// @dev An account with no checkpoint yet has no ciphertext at all, and FHE operations need

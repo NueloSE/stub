@@ -254,6 +254,50 @@ describe("StubPool", function () {
     });
   });
 
+  describe("a draw that never settles", function () {
+    /**
+     * Without a way out, a sealed-but-unsettled draw bricks the pool: sealDraw refuses to
+     * re-seal and currentDrawId only advances on settlement, so one long relayer outage would
+     * freeze every future draw permanently. Deposits and withdrawals would keep working and
+     * nobody could ever win again.
+     */
+    it("cannot be abandoned while the settlement window is open", async function () {
+      await joinPool(alice, 600e6);
+      await time.increase(DRAW_INTERVAL + 1);
+      await (await pool.sealDraw()).wait();
+
+      await expect(pool.voidDraw()).to.be.revertedWithCustomError(pool, "SettlementWindowOpen");
+    });
+
+    it("can be abandoned by anyone once the window closes, and rolls the prize forward", async function () {
+      await joinPool(alice, 600e6);
+      await time.increase(DRAW_INTERVAL + 1);
+
+      const drawId = await pool.currentDrawId();
+      await (await pool.sealDraw()).wait();
+      const stranded = (await pool.draws(drawId)).prize;
+      expect(stranded).to.be.greaterThan(0n);
+
+      await time.increase(24 * 60 * 60 + 1);
+      // Anyone, not just the owner — settling is permissionless, so abandoning must be too.
+      await expect(pool.connect(bob).voidDraw()).to.emit(pool, "DrawVoid").withArgs(drawId, stranded);
+
+      const voided = await pool.draws(drawId);
+      expect(voided.isVoid).to.equal(true);
+      expect(await pool.currentDrawId()).to.equal(drawId + 1n, "the pool must move on");
+      expect(await pool.rolloverPrize()).to.equal(stranded, "the prize is deferred, not burned");
+
+      // A voided draw has no seed, so it has no winners and no tickets.
+      await expect(pool.openStub(drawId, alice.address)).to.be.revertedWithCustomError(pool, "DrawVoided");
+      await expect(pool.ticketOf(drawId, alice.address)).to.be.revertedWithCustomError(pool, "DrawVoided");
+
+      // The next draw carries the abandoned prize on top of its own.
+      const next = await runDraw();
+      expect(next.settled.prize).to.be.greaterThan(stranded, "rollover is added to fresh yield");
+      expect(await pool.rolloverPrize()).to.equal(0n);
+    });
+  });
+
   describe("prize calibration", function () {
     /**
      * The first live draw paid 0.039954 cUSDC because the mock accrued an APR over four minutes.
