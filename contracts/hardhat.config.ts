@@ -20,9 +20,9 @@ const config: HardhatUserConfig = {
     deployer: 0,
   },
   etherscan: {
-    apiKey: {
-      sepolia: vars.get("ETHERSCAN_API_KEY", ""),
-    },
+    // Etherscan V2 uses one key across every supported chain, Sepolia included, so this is a
+    // plain string rather than a per-network map. Get one at etherscan.io, not sepolia.etherscan.io.
+    apiKey: vars.get("ETHERSCAN_API_KEY", ""),
   },
   networks: {
     hardhat: {
