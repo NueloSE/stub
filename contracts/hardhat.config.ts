@@ -5,6 +5,8 @@ import "@nomicfoundation/hardhat-verify";
 import "@typechain/hardhat";
 import "hardhat-deploy";
 import type { HardhatUserConfig } from "hardhat/config";
+
+import "./tasks/verify-all";
 import { vars } from "hardhat/config";
 
 const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test junk");
