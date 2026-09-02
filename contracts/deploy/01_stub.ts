@@ -19,8 +19,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // Fifteen minutes. A judge visits once; an hourly cadence means they see a stale draw and
   // leave. The owner can shorten it further with `setDrawInterval` when recording the video.
   const DRAW_INTERVAL = 15 * 60;
-  const YIELD_RATE_BPS = 1_000; // 10% simulated APR
-  const RESERVE = 50_000n * 10n ** 6n;
+  // Calibrate the mock against the draw interval rather than against a year. A judge should see
+  // a prize worth looking at, and 900 seconds of any believable APR is worth a few cents.
+  const TARGET_PRIZE_PER_DRAW = 25n * 10n ** 6n; // 25 cUSDC
+  const DRIP_PER_SECOND = TARGET_PRIZE_PER_DRAW / BigInt(DRAW_INTERVAL);
+  const RESERVE = 50_000n * 10n ** 6n; // ~33 days of draws at that drip
 
   const live = network.name === "sepolia";
 
@@ -46,7 +49,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const yieldSource = await deploy("MockYieldSource", {
     from: deployer,
-    args: [usdcAddress, YIELD_RATE_BPS, deployer],
+    args: [usdcAddress, DRIP_PER_SECOND, deployer],
     log: true,
   });
 
@@ -81,11 +84,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await (await yieldContract.fund(shortfall)).wait();
   }
 
+  // Keep the drip correct even when the yield source is reused across deploys.
+  if ((await yieldContract.dripPerSecond()) !== DRIP_PER_SECOND) {
+    log(`setting drip to ${DRIP_PER_SECOND}/s (~${TARGET_PRIZE_PER_DRAW / 10n ** 6n} cUSDC per draw)`);
+    await (await yieldContract.setDripPerSecond(DRIP_PER_SECOND)).wait();
+  }
+
   log(`\nStub deployed on ${network.name}:`);
   log(`  StubPool        ${pool.address}`);
   log(`  MockYieldSource ${yieldSource.address}`);
   log(`  cUSDC           ${confidentialUsdcAddress}`);
   log(`  USDC            ${usdcAddress}`);
+  log(`  prize per draw  ~${TARGET_PRIZE_PER_DRAW / 10n ** 6n} cUSDC (simulated)`);
 };
 
 func.id = "deploy_stub";

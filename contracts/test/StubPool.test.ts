@@ -33,7 +33,7 @@ describe("StubPool", function () {
 
     yieldSource = (await (await ethers.getContractFactory("MockYieldSource")).deploy(
       await usd.getAddress(),
-      1_000, // 10% simulated APR
+      25_000_000n / 3600n, // ~25 cUSDC per hour-long draw
       owner.address,
     )) as MockYieldSource;
     await yieldSource.waitForDeployment();
@@ -251,6 +251,30 @@ describe("StubPool", function () {
     it("will not seal before the interval has elapsed", async function () {
       await joinPool(alice, 600e6);
       await expect(pool.sealDraw()).to.be.revertedWithCustomError(pool, "DrawNotReady");
+    });
+  });
+
+  describe("prize calibration", function () {
+    /**
+     * The first live draw paid 0.039954 cUSDC because the mock accrued an APR over four minutes.
+     * The arithmetic was right and the result was useless: a prize nobody can see is a prize
+     * nobody believes. The mock now drips against the draw interval instead, and this pins it.
+     */
+    it("pays a prize worth looking at over one draw interval", async function () {
+      await joinPool(alice, 600e6);
+
+      const perInterval = await yieldSource.prizePerInterval(DRAW_INTERVAL);
+      expect(perInterval).to.be.greaterThan(10e6, "a draw must pay more than pocket change");
+
+      const { settled } = await runDraw();
+      console.log(`      prize: ${ethers.formatUnits(settled.prize, 6)} cUSDC per ${DRAW_INTERVAL}s draw`);
+      expect(settled.prize).to.be.greaterThan(10e6);
+    });
+
+    it("reports how long the reserve lasts", async function () {
+      const runway = await yieldSource.runwaySeconds();
+      console.log(`      runway: ${(Number(runway) / 86400).toFixed(1)} days of draws`);
+      expect(runway).to.be.greaterThan(7n * 86400n, "reserve must outlast the judging window");
     });
   });
 

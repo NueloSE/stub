@@ -9,17 +9,30 @@ import {IYieldSource} from "../interfaces/IYieldSource.sol";
 
 /**
  * @title  MockYieldSource
- * @notice Stands in for a real venue on Sepolia, where none exists. Accrues at a fixed rate
- *         against a reserve the owner funds up front, so a draw has something to pay out.
- * @dev    The accrual is simulated and openly so — nothing here should be mistaken for a return.
- *         Every number the app shows that originates here is labelled as simulated. Swapping in
- *         the Morpho adapter changes this contract and nothing else.
+ * @notice An admin-funded prize reserve that releases a fixed amount per second. Stands in for a
+ *         real venue on Sepolia, where none exists.
+ *
+ * @dev    This is a drip, not a rate of return, and the distinction is deliberate. An APR-shaped
+ *         mock reads as more realistic but does not survive contact with a fifteen-minute draw:
+ *         900 seconds is a rounding error against a year, so any believable APR pays a prize of a
+ *         few cents, and reaching a prize worth looking at would need a rate nobody would print.
+ *         A drip is calibrated directly against the draw interval, and is obviously simulated
+ *         rather than dressed up as a return.
+ *
+ *         The bounty permits exactly this — "a mock yield source on Sepolia is acceptable (e.g.,
+ *         an admin-funded prize reserve)". The app labels every figure originating here as
+ *         simulated.
+ *
+ *         {IYieldSource} is unchanged. A live adapter accrues from a venue's position instead,
+ *         and nothing in {StubPool} knows the difference. The Steakhouse Confidential Prime USDC
+ *         vault on Morpho is the intended mainnet implementation; unlike this contract, its yield
+ *         scales with deposits.
  */
 contract MockYieldSource is IYieldSource, Ownable {
     using SafeERC20 for IERC20;
 
-    /// @notice Simulated annual rate, in basis points.
-    uint256 public rateBps;
+    /// @notice Asset units released per second, capped by what the reserve actually holds.
+    uint256 public dripPerSecond;
 
     /// @notice Only the pool may move principal in and out.
     address public pool;
@@ -34,7 +47,7 @@ contract MockYieldSource is IYieldSource, Ownable {
     error InsufficientReserve(uint256 wanted, uint256 available);
 
     event Harvested(uint256 amount);
-    event RateUpdated(uint256 rateBps);
+    event DripUpdated(uint256 dripPerSecond);
     event PoolUpdated(address pool);
 
     modifier onlyPool() {
@@ -42,9 +55,9 @@ contract MockYieldSource is IYieldSource, Ownable {
         _;
     }
 
-    constructor(IERC20 asset_, uint256 rateBps_, address initialOwner) Ownable(initialOwner) {
+    constructor(IERC20 asset_, uint256 dripPerSecond_, address initialOwner) Ownable(initialOwner) {
         _asset = asset_;
-        rateBps = rateBps_;
+        dripPerSecond = dripPerSecond_;
         _accruedAt = block.timestamp;
     }
 
@@ -56,16 +69,22 @@ contract MockYieldSource is IYieldSource, Ownable {
         return _principal;
     }
 
-    /// @notice Yield earned since the last settle point, capped by what the reserve can pay.
-    /// @dev    Accrues against the reserve rather than deployed principal. On Sepolia the pool's
-    ///         principal stays wrapped as cUSD and is never handed to a venue, so there is no
-    ///         real position to earn on — the reserve is the whole simulation. A live adapter
-    ///         would accrue on {totalAssets} instead.
+    /// @notice What the next draw would pay, capped by the reserve.
     function accruedYield() public view returns (uint256) {
         uint256 reserve = _asset.balanceOf(address(this));
-        uint256 elapsed = block.timestamp - _accruedAt;
-        uint256 earned = _carried + (reserve * rateBps * elapsed) / (10_000 * 365 days);
+        uint256 earned = _carried + (block.timestamp - _accruedAt) * dripPerSecond;
         return earned > reserve ? reserve : earned;
+    }
+
+    /// @notice What one full draw interval is worth at the current drip. For display.
+    function prizePerInterval(uint256 interval) external view returns (uint256) {
+        return interval * dripPerSecond;
+    }
+
+    /// @notice How long the reserve lasts at the current drip, in seconds.
+    function runwaySeconds() external view returns (uint256) {
+        if (dripPerSecond == 0) return type(uint256).max;
+        return _asset.balanceOf(address(this)) / dripPerSecond;
     }
 
     function deposit(uint256 amount) external onlyPool {
@@ -99,13 +118,13 @@ contract MockYieldSource is IYieldSource, Ownable {
         emit PoolUpdated(pool_);
     }
 
-    function setRateBps(uint256 rateBps_) external onlyOwner {
+    function setDripPerSecond(uint256 dripPerSecond_) external onlyOwner {
         _settle();
-        rateBps = rateBps_;
-        emit RateUpdated(rateBps_);
+        dripPerSecond = dripPerSecond_;
+        emit DripUpdated(dripPerSecond_);
     }
 
-    /// @notice Top the reserve up so draws keep paying. Owner pulls from their own balance.
+    /// @notice Top the reserve up so draws keep paying. Pulled from the caller.
     function fund(uint256 amount) external {
         _asset.safeTransferFrom(msg.sender, address(this), amount);
     }
