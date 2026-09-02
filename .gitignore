@@ -21,3 +21,8 @@ web/.vercel/
 *.log
 contracts/fhevmTemp/
 docs/.season-4-plan.md.bak
+
+# Working notes kept outside the repository (../stub-strategy/)
+CLAUDE.md
+docs/season-*.md
+docs/*.bak
