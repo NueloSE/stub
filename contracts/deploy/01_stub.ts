@@ -16,8 +16,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy, log } = deployments;
   const { deployer } = await getNamedAccounts();
 
-  // One hour, so a judge does not have to wait to watch a draw land.
-  const DRAW_INTERVAL = 60 * 60;
+  // Fifteen minutes. A judge visits once; an hourly cadence means they see a stale draw and
+  // leave. The owner can shorten it further with `setDrawInterval` when recording the video.
+  const DRAW_INTERVAL = 15 * 60;
   const YIELD_RATE_BPS = 1_000; // 10% simulated APR
   const RESERVE = 50_000n * 10n ** 6n;
 

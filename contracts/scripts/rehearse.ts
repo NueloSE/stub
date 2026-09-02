@@ -119,21 +119,39 @@ async function main() {
   console.log(`  your balance: ${ethers.formatUnits(balance, 6)} cUSDC`);
 
   step(6, "seal and settle the draw");
-  // Local networks can skip ahead. Sepolia cannot, and says so plainly.
   const chainId = (await ethers.provider.getNetwork()).chainId;
-  if (chainId === 31337n) {
-    const readyAt = await pool.sealableAt();
-    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
-    if (now < readyAt) {
+  const readyAt = await pool.sealableAt();
+  const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+  let restoreInterval = 0n;
+
+  if (now < readyAt) {
+    if (chainId === 31337n) {
+      // Local networks can simply skip ahead.
       await ethers.provider.send("evm_increaseTime", [Number(readyAt - now) + 1]);
       await ethers.provider.send("evm_mine", []);
       console.log(`  (local network: advanced past the draw interval)`);
+    } else if (process.env.FORCE_DRAW === "1" && (await pool.owner()) === me) {
+      // A freshly deployed pool is not sealable for a full interval, and a recording cannot
+      // wait. Collapse the interval, seal, and put it back — deliberately, behind a flag.
+      restoreInterval = await pool.drawInterval();
+      console.log(`  FORCE_DRAW: collapsing the ${restoreInterval}s interval for this run`);
+      await (await pool.setDrawInterval(0)).wait();
+    } else {
+      throw new Error(
+        `draw is not sealable for another ${readyAt - now}s. ` +
+          `Wait, or re-run with FORCE_DRAW=1 if you own the pool.`,
+      );
     }
   }
   const reserve = await usdc.balanceOf(await yieldSource.getAddress());
   console.log(`  prize reserve: ${ethers.formatUnits(reserve, 6)} USDC`);
   console.log(`  accrued yield: ${ethers.formatUnits(await yieldSource.accruedYield(), 6)} USDC`);
   const { drawId, draw } = await sealAndSettle(hre, pool);
+
+  if (restoreInterval > 0n) {
+    console.log(`  restoring the ${restoreInterval}s draw interval`);
+    await (await pool.setDrawInterval(restoreInterval)).wait();
+  }
 
   step(7, "open your stub");
   const ticket = await pool.ticketOf(drawId, me);
