@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/**
+ * Stub reads as a paper ticket held against a dark room. The interface is near-black so the
+ * stub itself — the one light object on the page — carries the eye. Accent is a single token,
+ * so the whole identity moves by changing one line.
+ */
+@theme {
+  --color-ink: #08080b;
+  --color-ink-raised: #0f0f14;
+  --color-ink-line: #1c1c24;
+  --color-ink-line-strong: #2a2a35;
+
+  --color-paper: #f5f2e8;
+  --color-paper-dim: #ddd8c8;
+  --color-paper-line: #c9c2ad;
+
+  --color-fg: #e8e8ef;
+  --color-fg-muted: #8b8b9a;
+  --color-fg-faint: #5a5a68;
+
+  --color-accent: #7b6cff;
+  --color-accent-dim: #574bcc;
+  --color-accent-faint: #1a1730;
+
+  --color-won: #38d29a;
+  --color-won-faint: #0c2a20;
+  --color-warn: #e8a33d;
+  --color-danger: #f2605c;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+
+  --radius-stub: 14px;
+}
+
+* {
+  border-color: var(--color-ink-line);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers that change should not reflow the layout under them. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* The perforation down the middle of a stub. */
+.perforation {
+  background-image: radial-gradient(circle, var(--color-paper-line) 1.5px, transparent 1.6px);
+  background-size: 4px 12px;
+  background-repeat: repeat-y;
+  background-position: center top;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
