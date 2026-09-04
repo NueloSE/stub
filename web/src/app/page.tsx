@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDownToLine, ArrowUpFromLine, Droplet, Eye, Gavel, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { sepolia } from "wagmi/chains";
@@ -314,50 +315,12 @@ export default function Home() {
             Everyone gets a stub. Only you can open yours.
           </h1>
           <p className="mt-4 max-w-xl text-fg-muted">
-            Deposit, keep your principal, and the pooled yield is drawn as a prize. Every draw is
-            checkable by anyone. Every balance is readable by one person.
+            Deposit, keep your principal, and the pooled yield is drawn as a prize.
           </p>
 
-          <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-ink-line bg-ink-line sm:grid-cols-4">
-            {[
-              { k: "Prize next draw", v: `${formatUSDC(pool.nextPrize)}`, u: "cUSDC" },
-              {
-                k: sealed ? "Awaiting settlement" : "Next draw",
-                v: sealed ? "sealed" : formatCountdown(secondsToSeal),
-                u: "",
-              },
-              { k: "Draw", v: `#${pool.currentDrawId}`, u: "" },
-              { k: "Your balance", v: balance !== undefined ? formatUSDC(balance) : "sealed", u: balance !== undefined ? "cUSDC" : "" },
-            ].map((s) => (
-              <div key={s.k} className="bg-ink-raised px-4 py-4">
-                <dt className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-                  {s.k}
-                </dt>
-                <dd className="tabular mt-1.5 font-mono text-lg text-fg">
-                  {s.v} {s.u && <span className="text-xs text-fg-faint">{s.u}</span>}
-                </dd>
-              </div>
-            ))}
-          </dl>
         </section>
 
-        {wrongNetwork && (
-          <p className="mt-6 rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
-            You&apos;re on the wrong network. Stub is deployed on Sepolia only.
-          </p>
-        )}
-        {error && (
-          <p className="mt-6 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {error}
-          </p>
-        )}
-        {notice && !error && (
-          <p className="mt-6 rounded-lg border border-won/25 bg-won-faint px-4 py-3 text-sm text-won">
-            {notice}
-          </p>
-        )}
-
-        <section className="mt-10">
+        <section className="mt-8">
           <StubCard
             state={stubState}
             drawId={pool.openableId ?? pool.currentDrawId}
@@ -401,6 +364,57 @@ export default function Home() {
               </span>
             )}
           </div>
+          <p className="mt-4 text-xs text-fg-faint">
+            Not taking anyone&apos;s word for it?{" "}
+            <Link
+              href={`/verify/${pool.openableId ?? pool.currentDrawId}`}
+              className="text-accent underline-offset-4 hover:underline"
+            >
+              Recompute this draw yourself
+            </Link>{" "}
+            — no wallet needed.
+          </p>
+        </section>
+
+        {wrongNetwork && (
+          <p className="mt-6 rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
+            You&apos;re on the wrong network. Stub is deployed on Sepolia only.
+          </p>
+        )}
+        {error && (
+          <p className="mt-6 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
+        {notice && !error && (
+          <p className="mt-6 rounded-lg border border-won/25 bg-won-faint px-4 py-3 text-sm text-won">
+            {notice}
+          </p>
+        )}
+
+
+        <section className="mt-8">
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-ink-line bg-ink-line sm:grid-cols-4">
+            {[
+              { k: "Prize next draw", v: `${formatUSDC(pool.nextPrize)}`, u: "cUSDC" },
+              {
+                k: sealed ? "Awaiting settlement" : "Next draw",
+                v: sealed ? "sealed" : formatCountdown(secondsToSeal),
+                u: "",
+              },
+              { k: "Draw", v: `#${pool.currentDrawId}`, u: "" },
+              { k: "Your balance", v: balance !== undefined ? formatUSDC(balance) : "sealed", u: balance !== undefined ? "cUSDC" : "" },
+            ].map((s) => (
+              <div key={s.k} className="bg-ink-raised px-4 py-4">
+                <dt className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
+                  {s.k}
+                </dt>
+                <dd className="tabular mt-1.5 font-mono text-lg text-fg">
+                  {s.v} {s.u && <span className="text-xs text-fg-faint">{s.u}</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
         <div className="mt-10 grid gap-5 lg:grid-cols-2">
@@ -510,6 +524,9 @@ export default function Home() {
             <a className="hover:text-fg" href={`https://sepolia.etherscan.io/address/${ADDRESSES.yieldSource}#code`} target="_blank" rel="noreferrer">
               yield source ↗
             </a>
+            <Link className="hover:text-fg" href="/verify">
+              check a draw
+            </Link>
             <a className="hover:text-fg" href="https://github.com/NueloSE/stub" target="_blank" rel="noreferrer">
               source ↗
             </a>
