@@ -349,18 +349,6 @@ export default function Home() {
                 Claim {formatUSDC(winnings)} cUSDC
               </Button>
             )}
-            {isConnected && canSeal && (
-              <Button variant="secondary" loading={busy === "seal"} onClick={seal}>
-                <Gavel className="h-4 w-4" aria-hidden />
-                Seal draw #{pool.currentDrawId.toString()}
-              </Button>
-            )}
-            {isConnected && sealed && (
-              <Button variant="secondary" loading={busy === "settle" || busy === "asking the relayer"} onClick={settle}>
-                <Gavel className="h-4 w-4" aria-hidden />
-                Settle draw #{pool.currentDrawId.toString()}
-              </Button>
-            )}
             {busy && (
               <span className="text-xs text-fg-faint">
                 {busy === "encrypting"
@@ -371,6 +359,42 @@ export default function Home() {
               </span>
             )}
           </div>
+
+          {/*
+            Running the draw is a keeper action, not something a first-time visitor should reach
+            for — their action is to deposit. It stays visible because permissionless settlement
+            is a real property worth demonstrating, but it is subordinate and labelled.
+          */}
+          {isConnected && (canSeal || sealed) && (
+            <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-ink-line bg-ink-raised px-4 py-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
+                Anyone can run the draw
+              </span>
+              {canSeal && (
+                <Button variant="ghost" size="sm" loading={busy === "seal"} onClick={seal}>
+                  <Gavel className="h-3.5 w-3.5" aria-hidden />
+                  Seal #{pool.currentDrawId.toString()}
+                </Button>
+              )}
+              {sealed && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  loading={busy === "settle" || busy === "asking the relayer"}
+                  onClick={settle}
+                >
+                  <Gavel className="h-3.5 w-3.5" aria-hidden />
+                  Settle #{pool.currentDrawId.toString()}
+                </Button>
+              )}
+              <span className="text-xs text-fg-faint">
+                {sealed
+                  ? "Sealed. Fetch the decrypted seed and total from the relayer and write them back."
+                  : "No operator required — sealing and settling are open to everyone."}
+              </span>
+            </div>
+          )}
+
           <p className="mt-4 text-xs text-fg-faint">
             Not taking anyone&apos;s word for it?{" "}
             <Link
