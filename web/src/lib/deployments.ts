@@ -5,7 +5,7 @@ export const CHAIN_ID = 11155111 as const;
 
 export const ADDRESSES = {
   /** The pool. Ours. */
-  pool: "0xD9eFD91aeBff7AB589939Ce66a05Ed185851C405",
+  pool: "0xAAe1604c4785C5737A835C904234C59B2313962E",
   /** The mock prize reserve. Ours. */
   yieldSource: "0x7252ea409f88A8BAd4520CDAEe55441985D5836c",
   /** Zama's Confidential USDC (Mock) — an ERC-7984 wrapper we do not deploy. */
@@ -76,6 +76,17 @@ export const POOL_ABI = [
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "drawId",
+        "type": "uint64"
+      }
+    ],
+    "name": "DrawVoided",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "EmptyPool",
     "type": "error"
@@ -115,6 +126,22 @@ export const POOL_ABI = [
   {
     "inputs": [
       {
+        "internalType": "uint8",
+        "name": "bits",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "value",
+        "type": "uint256"
+      }
+    ],
+    "name": "SafeCastOverflowedUintDowncast",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "token",
         "type": "address"
@@ -137,6 +164,17 @@ export const POOL_ABI = [
       }
     ],
     "name": "SenderNotAllowedToUseHandle",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "voidableAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "SettlementWindowOpen",
     "type": "error"
   },
   {
@@ -252,6 +290,25 @@ export const POOL_ABI = [
       }
     ],
     "name": "DrawSettled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "drawId",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "prizeRolledOver",
+        "type": "uint64"
+      }
+    ],
+    "name": "DrawVoid",
     "type": "event"
   },
   {
@@ -448,6 +505,16 @@ export const POOL_ABI = [
           },
           {
             "internalType": "uint64",
+            "name": "sealedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "isVoid",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint64",
             "name": "totalAtSeal",
             "type": "uint64"
           },
@@ -517,6 +584,19 @@ export const POOL_ABI = [
         "internalType": "address",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "rolloverPrize",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -646,6 +726,32 @@ export const POOL_ABI = [
         "internalType": "contract IERC7984ERC20Wrapper",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "voidDraw",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "drawId",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "voidableAt",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

@@ -257,6 +257,29 @@ export async function encryptAmount(
   return { handle: encryptedValue as `0x${string}`, inputProof: inputProof as `0x${string}` };
 }
 
+/**
+ * Fetch the public decryptions of a draw's seed and total, with the KMS proof the contract
+ * needs to accept them.
+ *
+ * This is the whole keeper flow, and it runs in the browser: sealing marks both handles
+ * publicly decryptable, the relayer produces the cleartexts and a proof, and `settleDraw`
+ * verifies the signatures before it will believe either number. That is why settling can be
+ * permissionless — nobody can settle a draw with values the KMS did not sign.
+ */
+export async function fetchSettlement(
+  client: FhevmClient,
+  seedHandle: string,
+  totalHandle: string,
+): Promise<{ cleartexts: `0x${string}`; proof: `0x${string}` }> {
+  const { checkSignaturesArgs } = await client.decryptPublicValuesWithSignatures({
+    encryptedValues: [seedHandle, totalHandle],
+  });
+  return {
+    cleartexts: checkSignaturesArgs.abiEncodedCleartexts as `0x${string}`,
+    proof: checkSignaturesArgs.decryptionProof as `0x${string}`,
+  };
+}
+
 /** Read the publicly decryptable pool total, published at each seal. */
 export async function decryptPublic(
   client: FhevmClient,
