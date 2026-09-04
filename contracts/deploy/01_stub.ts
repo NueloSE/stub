@@ -49,7 +49,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const yieldSource = await deploy("MockYieldSource", {
     from: deployer,
-    args: [usdcAddress, DRIP_PER_SECOND, deployer],
+    args: [usdcAddress, DRIP_PER_SECOND, DRAW_INTERVAL, deployer],
     log: true,
   });
 
@@ -84,7 +84,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await (await yieldContract.fund(shortfall)).wait();
   }
 
-  // Keep the drip correct even when the yield source is reused across deploys.
+  // Keep the calibration correct even when the yield source is reused across deploys.
+  if ((await yieldContract.maxAccrualSeconds()) !== BigInt(DRAW_INTERVAL)) {
+    log(`capping accrual at one draw interval (${DRAW_INTERVAL}s)`);
+    await (await yieldContract.setMaxAccrualSeconds(DRAW_INTERVAL)).wait();
+  }
+
   if ((await yieldContract.dripPerSecond()) !== DRIP_PER_SECOND) {
     log(`setting drip to ${DRIP_PER_SECOND}/s (~${TARGET_PRIZE_PER_DRAW / 10n ** 6n} cUSDC per draw)`);
     await (await yieldContract.setDripPerSecond(DRIP_PER_SECOND)).wait();

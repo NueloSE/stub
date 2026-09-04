@@ -34,6 +34,14 @@ contract MockYieldSource is IYieldSource, Ownable {
     /// @notice Asset units released per second, capped by what the reserve actually holds.
     uint256 public dripPerSecond;
 
+    /// @notice The most accrual any single draw can collect, expressed as seconds of drip.
+    /// @dev    Without this the mock banks yield for however long nobody sealed a draw, so the
+    ///         first draw after a quiet weekend pays out a multiple of every other one and the
+    ///         prize figure the app advertises stops being true. A real venue does keep earning
+    ///         while nobody harvests; this is a simulation calibrated per draw, and capping it
+    ///         is what keeps "about 25 cUSDC a draw" an honest thing to print.
+    uint256 public maxAccrualSeconds;
+
     /// @notice Only the pool may move principal in and out.
     address public pool;
 
@@ -55,9 +63,15 @@ contract MockYieldSource is IYieldSource, Ownable {
         _;
     }
 
-    constructor(IERC20 asset_, uint256 dripPerSecond_, address initialOwner) Ownable(initialOwner) {
+    constructor(
+        IERC20 asset_,
+        uint256 dripPerSecond_,
+        uint256 maxAccrualSeconds_,
+        address initialOwner
+    ) Ownable(initialOwner) {
         _asset = asset_;
         dripPerSecond = dripPerSecond_;
+        maxAccrualSeconds = maxAccrualSeconds_;
         _accruedAt = block.timestamp;
     }
 
@@ -71,8 +85,14 @@ contract MockYieldSource is IYieldSource, Ownable {
 
     /// @notice What the next draw would pay, capped by the reserve.
     function accruedYield() public view returns (uint256) {
+        uint256 elapsed = block.timestamp - _accruedAt;
+        if (elapsed > maxAccrualSeconds) elapsed = maxAccrualSeconds;
+
+        uint256 ceiling = maxAccrualSeconds * dripPerSecond;
+        uint256 earned = _carried + elapsed * dripPerSecond;
+        if (earned > ceiling) earned = ceiling;
+
         uint256 reserve = _asset.balanceOf(address(this));
-        uint256 earned = _carried + (block.timestamp - _accruedAt) * dripPerSecond;
         return earned > reserve ? reserve : earned;
     }
 
@@ -122,6 +142,11 @@ contract MockYieldSource is IYieldSource, Ownable {
         _settle();
         dripPerSecond = dripPerSecond_;
         emit DripUpdated(dripPerSecond_);
+    }
+
+    function setMaxAccrualSeconds(uint256 maxAccrualSeconds_) external onlyOwner {
+        _settle();
+        maxAccrualSeconds = maxAccrualSeconds_;
     }
 
     /// @notice Top the reserve up so draws keep paying. Pulled from the caller.

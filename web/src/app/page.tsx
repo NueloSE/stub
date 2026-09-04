@@ -73,6 +73,8 @@ export default function Home() {
 
   const wrongNetwork = isConnected && chainId !== sepolia.id;
   const parsed = parseUSDC(amount);
+  /** Deposit needs the underlying in hand before it can wrap. Say so before the wallet does. */
+  const shortfall = isConnected && parsed !== undefined && parsed > wallet.usdc;
 
   const run = useCallback(
     async (label: string, fn: () => Promise<void>) => {
@@ -275,7 +277,12 @@ export default function Home() {
     {
       label: "Get test USDC",
       hint: "Zama's public mint — not a faucet we wrote",
-      state: wallet.usdc > 0n ? "done" : busy === "faucet" ? "busy" : "active",
+      state:
+        busy === "faucet"
+          ? "busy"
+          : parsed !== undefined && wallet.usdc >= parsed
+            ? "done"
+            : "active",
     },
     {
       label: "Approve and wrap into cUSDC",
@@ -283,7 +290,7 @@ export default function Home() {
       state:
         busy === "approving" || busy === "wrapping"
           ? "busy"
-          : wallet.usdc > 0n
+          : parsed !== undefined && wallet.usdc >= parsed
             ? "active"
             : "pending",
     },
@@ -437,7 +444,7 @@ export default function Home() {
               </div>
               <Button
                 loading={["approving", "wrapping", "granting", "encrypting", "depositing"].includes(busy ?? "")}
-                disabled={!isConnected || wrongNetwork || !parsed}
+                disabled={!isConnected || wrongNetwork || !parsed || shortfall}
                 onClick={deposit}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden />
@@ -445,9 +452,11 @@ export default function Home() {
               </Button>
             </div>
 
-            {parsed !== undefined && parsed > wallet.usdc && wallet.usdc === 0n && (
-              <p className="mt-3 text-xs text-fg-faint">
-                You have no test USDC yet — use the faucet below.
+            {shortfall && (
+              <p className="mt-3 text-xs text-warn">
+                {wallet.usdc === 0n
+                  ? "You have no test USDC yet — mint some below."
+                  : `You hold ${formatUSDC(wallet.usdc)} USDC and are trying to deposit ${formatUSDC(parsed)}. Mint more below, or lower the amount.`}
               </p>
             )}
 

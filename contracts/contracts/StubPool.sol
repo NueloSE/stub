@@ -251,7 +251,11 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         FHE.allowThis(seed);
         FHE.makePubliclyDecryptable(seed);
 
-        euint64 total = _total;
+        // An untouched pool has no ciphertext at all, and an uninitialised handle cannot be
+        // made publicly decryptable — the relayer will refuse it, leaving a sealed draw that can
+        // never be settled by anyone. Materialise a real encrypted zero so the seal always
+        // produces something the relayer will answer for.
+        euint64 total = _initialised(_total);
         FHE.allowThis(total);
         FHE.makePubliclyDecryptable(total);
 
@@ -287,7 +291,22 @@ contract StubPool is ZamaEthereumConfig, Ownable {
         FHE.checkSignatures(handles, cleartexts, proof);
 
         (uint256 seed, uint64 totalAtSeal) = abi.decode(cleartexts, (uint256, uint64));
-        if (totalAtSeal == 0) revert EmptyPool();
+
+        // A draw nobody was in has no winner. Voiding it here rather than reverting matters:
+        // sealing is permissionless and the pool total is encrypted, so nothing can stop a draw
+        // being sealed over an empty pool. If that reverted, the draw would sit unsettleable
+        // until the 24-hour window let someone abandon it, and the pool would be frozen in the
+        // meantime by a caller who did nothing wrong.
+        if (totalAtSeal == 0) {
+            d.isVoid = true;
+            d.isSettled = true;
+            uint64 stranded = d.prize;
+            d.prize = 0;
+            rolloverPrize += stranded;
+            currentDrawId = drawId + 1;
+            emit DrawVoid(drawId, stranded);
+            return;
+        }
 
         d.seed = seed;
         d.totalAtSeal = totalAtSeal;

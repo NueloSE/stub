@@ -5,9 +5,9 @@ export const CHAIN_ID = 11155111 as const;
 
 export const ADDRESSES = {
   /** The pool. Ours. */
-  pool: "0xAAe1604c4785C5737A835C904234C59B2313962E",
+  pool: "0x586E1c4fed4238BcD4E9b197Db688BD2D450e6Fb",
   /** The mock prize reserve. Ours. */
-  yieldSource: "0x7252ea409f88A8BAd4520CDAEe55441985D5836c",
+  yieldSource: "0xAfeAdBFDaB44C1218A4b972e534F81c3DF573255",
   /** Zama's Confidential USDC (Mock) — an ERC-7984 wrapper we do not deploy. */
   confidentialUSDC: "0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639",
   /** Its underlying, with a public mint that serves as the faucet. */

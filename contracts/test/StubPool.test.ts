@@ -34,6 +34,7 @@ describe("StubPool", function () {
     yieldSource = (await (await ethers.getContractFactory("MockYieldSource")).deploy(
       await usd.getAddress(),
       25_000_000n / 3600n, // ~25 cUSDC per hour-long draw
+      DRAW_INTERVAL, // never bank more than one draw's worth
       owner.address,
     )) as MockYieldSource;
     await yieldSource.waitForDeployment();
@@ -254,6 +255,36 @@ describe("StubPool", function () {
     });
   });
 
+  describe("a draw over an empty pool", function () {
+    /**
+     * Sealing is permissionless and the pool total is encrypted, so nothing on-chain can stop a
+     * draw being sealed while the pool is empty. If settlement reverted for that, the pool would
+     * sit frozen until someone could abandon the draw a day later — punished for a caller doing
+     * something the contract allowed.
+     */
+    it("settles as void rather than reverting, and moves on immediately", async function () {
+      await time.increase(DRAW_INTERVAL + 1);
+      const drawId = await pool.currentDrawId();
+      await (await pool.sealDraw()).wait();
+
+      const d = await pool.draws(drawId);
+      const decrypted = await fhevm.publicDecrypt([d.seedHandle, d.totalHandle]);
+      await expect(pool.settleDraw(decrypted.abiEncodedClearValues, decrypted.decryptionProof)).to.emit(
+        pool,
+        "DrawVoid",
+      );
+
+      expect((await pool.draws(drawId)).isVoid).to.equal(true);
+      expect(await pool.currentDrawId()).to.equal(drawId + 1n, "the pool is not stuck");
+
+      // And the next real draw still works.
+      await joinPool(alice, 500e6);
+      const next = await runDraw();
+      expect(next.settled.isSettled).to.equal(true);
+      expect(next.settled.isVoid).to.equal(false);
+    });
+  });
+
   describe("a draw that never settles", function () {
     /**
      * Without a way out, a sealed-but-unsettled draw bricks the pool: sealDraw refuses to
@@ -313,6 +344,17 @@ describe("StubPool", function () {
       const { settled } = await runDraw();
       console.log(`      prize: ${ethers.formatUnits(settled.prize, 6)} cUSDC per ${DRAW_INTERVAL}s draw`);
       expect(settled.prize).to.be.greaterThan(10e6);
+    });
+
+    it("never banks more than one draw's worth of yield", async function () {
+      // Two full intervals of quiet must not pay double.
+      await time.increase(DRAW_INTERVAL * 4);
+      const accrued = await yieldSource.accruedYield();
+      const oneDraw = await yieldSource.prizePerInterval(DRAW_INTERVAL);
+      console.log(
+        `      after 4 idle intervals: ${ethers.formatUnits(accrued, 6)} vs one draw ${ethers.formatUnits(oneDraw, 6)}`,
+      );
+      expect(accrued).to.be.lessThanOrEqual(oneDraw);
     });
 
     it("reports how long the reserve lasts", async function () {
