@@ -36,6 +36,8 @@ const FAUCET_AMOUNT = 1_000n * UNIT;
 function explain(error: unknown): string {
   const raw = (error as Error)?.message ?? String(error);
   if (/user rejected|denied transaction|rejected the request/i.test(raw)) return "Cancelled in your wallet.";
+  if (/timed out|timeout/i.test(raw)) return "Timed out waiting for confirmation. The transaction may still land — check the explorer link.";
+  if (/reverted on-chain/i.test(raw)) return raw;
   if (/insufficient funds/i.test(raw)) return "Not enough Sepolia ETH for gas.";
   if (/DrawNotReady/i.test(raw)) return "The draw interval has not elapsed yet.";
   if (/DrawNotSettled/i.test(raw)) return "That draw has not been settled yet.";
@@ -65,6 +67,8 @@ export default function Home() {
   const [outcome, setOutcome] = useState<boolean>();
   const [ticket, setTicket] = useState<bigint>();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const [pendingHash, setPendingHash] = useState<`0x${string}`>();
+  const [awaitingWallet, setAwaitingWallet] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -87,16 +91,40 @@ export default function Home() {
         setError(explain(e));
       } finally {
         setBusy(undefined);
+        setAwaitingWallet(false);
       }
     },
     [],
   );
 
+  /**
+   * Send a transaction and wait for it, reporting enough to diagnose a stall.
+   *
+   * Three things this does that the obvious version does not, each learned the hard way:
+   * it surfaces the hash the moment the wallet returns, so a slow confirmation is visibly
+   * pending rather than indistinguishable from a hang; it gives up waiting after two minutes
+   * instead of spinning forever; and it treats a reverted receipt as a failure, because
+   * `waitForTransactionReceipt` resolves happily for a transaction that reverted on-chain.
+   */
   const send = useCallback(
     async (request: Parameters<NonNullable<typeof walletClient>["writeContract"]>[0]) => {
       if (!walletClient || !publicClient) throw new Error("Connect a wallet first.");
-      const hash = await walletClient.writeContract(request);
-      await publicClient.waitForTransactionReceipt({ hash });
+
+      setPendingHash(undefined);
+      setAwaitingWallet(true);
+      let hash: `0x${string}`;
+      try {
+        hash = await walletClient.writeContract(request);
+      } finally {
+        setAwaitingWallet(false);
+      }
+      setPendingHash(hash);
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
+      if (receipt.status === "reverted") {
+        throw new Error(`Transaction reverted on-chain. ${hash}`);
+      }
+      setPendingHash(undefined);
       return hash;
     },
     [walletClient, publicClient],
@@ -378,12 +406,26 @@ export default function Home() {
             )}
             {busy && (
               <span className="text-xs text-fg-faint">
-                {busy === "encrypting"
-                  ? "Building a zero-knowledge proof — this takes about 12 seconds."
-                  : busy === "asking the relayer"
-                    ? "Asking the relayer for the decrypted seed and pool total…"
-                    : `${busy}…`}
+                {awaitingWallet
+                  ? "Waiting for your wallet — check for a pending request."
+                  : busy === "encrypting"
+                    ? "Building a zero-knowledge proof — this takes about 12 seconds."
+                    : busy === "asking the relayer"
+                      ? "Asking the relayer for the decrypted seed and pool total…"
+                      : pendingHash
+                        ? "Waiting for confirmation on Sepolia…"
+                        : `${busy}…`}
               </span>
+            )}
+            {pendingHash && (
+              <a
+                href={`https://sepolia.etherscan.io/tx/${pendingHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-xs text-accent underline-offset-4 hover:underline"
+              >
+                view transaction ↗
+              </a>
             )}
           </div>
 
