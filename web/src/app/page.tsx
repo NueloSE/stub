@@ -244,8 +244,11 @@ export default function Home() {
 
   const reveal = () =>
     run("reveal", async () => {
-      const value = await decryption.readUint(POOL, handles.balanceHandle);
-      setBalance(value ?? 0n);
+      const handle = (await publicClient!.readContract({
+        address: POOL, abi: POOL_ABI, functionName: "confidentialBalanceOf",
+        args: [address!],
+      })) as string;
+      setBalance((await decryption.readUint(POOL, handle)) ?? 0n);
     });
 
   const seal = () =>
@@ -287,23 +290,30 @@ export default function Home() {
         await pool.refresh();
       }
       setBusy("revealing");
-      const [t, won, w] = await Promise.all([
+
+      // Read the handles straight from the chain rather than from the hook. openStub has just
+      // rewritten both of them, and anything captured when this callback was created still
+      // points at the pre-draw values — an empty winnings handle that decrypts to zero, which
+      // reads on screen as winning nothing.
+      const [t, stubHandle, winningsHandle] = await Promise.all([
         publicClient!.readContract({
           address: POOL, abi: POOL_ABI, functionName: "ticketOf",
           args: [pool.openableId, address!],
         }) as Promise<bigint>,
-        publicClient!
-          .readContract({
-            address: POOL, abi: POOL_ABI, functionName: "stubOf",
-            args: [pool.openableId, address!],
-          })
-          .then((h) => decryption.readBool(POOL, h as string)),
-        handles.refetch().then(() => undefined),
+        publicClient!.readContract({
+          address: POOL, abi: POOL_ABI, functionName: "stubOf",
+          args: [pool.openableId, address!],
+        }) as Promise<string>,
+        publicClient!.readContract({
+          address: POOL, abi: POOL_ABI, functionName: "confidentialWinningsOf",
+          args: [address!],
+        }) as Promise<string>,
       ]);
+
       setTicket(t);
-      setOutcome(won);
-      const owed = await decryption.readUint(POOL, handles.winningsHandle);
-      setWinnings(owed);
+      setOutcome(await decryption.readBool(POOL, stubHandle));
+      setWinnings(await decryption.readUint(POOL, winningsHandle));
+      await handles.refetch();
     });
 
   const claim = () =>
@@ -420,7 +430,7 @@ export default function Home() {
             drawId={pool.openableId ?? pool.currentDrawId}
             ticket={ticket}
             totalAtSeal={pool.openable?.totalAtSeal}
-            prize={winnings ?? pool.openable?.prize}
+            prize={pool.openable?.prize}
           />
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
