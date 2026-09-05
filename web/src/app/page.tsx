@@ -202,33 +202,54 @@ export default function Home() {
     });
 
   /**
-   * Encrypt the amount, and stop.
+   * Encrypt, and spend nothing.
    *
-   * Deliberately separate from sending. Building the proof takes twelve seconds, and a wallet
-   * request issued after that much async is no longer attached to a user gesture — browsers and
-   * extensions suppress the prompt, which looks exactly like the app hanging. Confirming is its
-   * own click so the wallet is always called from a fresh one.
+   * The first click has to be free and reversible. An earlier version ran the approval, the wrap
+   * and the operator grant here, so by the time "Confirm deposit" appeared up to three
+   * transactions had already been signed — and changing the amount afterwards discarded only the
+   * proof, leaving the wrap spent and unrecoverable. Preparing now touches the chain not at all.
+   *
+   * Encryption is still separated from sending because it takes twelve seconds, and a wallet
+   * request issued that long after a click is no longer attached to a user gesture.
    */
   const prepareDeposit = () =>
     run("encrypting", async () => {
       if (!parsed || parsed === 0n) throw new Error("Enter an amount above zero.");
       if (!decryption.client) throw new Error("The Zama SDK is still starting. Try again in a moment.");
 
-      // Wrapping is only necessary when the confidential balance cannot already cover the
-      // deposit. Wrapping regardless would spend USDC to duplicate cUSDC already held.
+      const input = await encryptAmount(decryption.client, POOL, address!, parsed);
+      setPrepared({ kind: "deposit", amount: parsed, input });
+      setNotice(
+        needsWrap
+          ? "Encrypted. Confirming will wrap and then deposit."
+          : "Encrypted. Confirm to send it to the pool.",
+      );
+    });
+
+  /**
+   * Everything that costs something, on one deliberate click.
+   *
+   * The wallet prompts chain: each follows a transaction the user has just approved, so none of
+   * them is issued from a stale gesture.
+   */
+  const confirmDeposit = () =>
+    run("depositing", async () => {
+      if (!prepared || prepared.kind !== "deposit") throw new Error("Nothing prepared.");
+      const amount = prepared.amount;
+
       if (needsWrap) {
-        if (wallet.allowance < parsed) {
+        if (wallet.allowance < amount) {
           setBusy("approving");
           await send({
             address: USDC, abi: USDC_ABI, functionName: "approve",
-            args: [CUSDC, parsed], account: address!, chain: sepolia,
+            args: [CUSDC, amount], account: address!, chain: sepolia,
           } as never);
         }
 
         setBusy("wrapping");
         await send({
           address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "wrap",
-          args: [address!, parsed], account: address!, chain: sepolia,
+          args: [address!, amount], account: address!, chain: sepolia,
         } as never);
       }
 
@@ -240,20 +261,12 @@ export default function Home() {
         } as never);
       }
 
-      setBusy("encrypting");
-      const input = await encryptAmount(decryption.client, POOL, address!, parsed);
-      setPrepared({ kind: "deposit", amount: parsed, input });
-      await wallet.refetch();
-      setNotice("Encrypted. Confirm to send it to the pool.");
-    });
-
-  const confirmDeposit = () =>
-    run("depositing", async () => {
-      if (!prepared || prepared.kind !== "deposit") throw new Error("Nothing prepared.");
+      setBusy("depositing");
       await send({
         address: POOL, abi: POOL_ABI, functionName: "deposit",
         args: [prepared.input.handle, prepared.input.inputProof], account: address!, chain: sepolia,
       } as never);
+
       setPrepared(undefined);
       await Promise.all([wallet.refetch(), handles.refetch(), pool.refresh()]);
       setBalance(undefined);
@@ -267,7 +280,7 @@ export default function Home() {
       if (!decryption.client) throw new Error("The Zama SDK is still starting. Try again in a moment.");
       const input = await encryptAmount(decryption.client, POOL, address!, parsed);
       setPrepared({ kind: "withdraw", amount: parsed, input });
-      setNotice("Encrypted. Confirm to take it out of the pool.");
+      setNotice("Encrypted. Confirm to take it out of the pool. Nothing has been sent yet.");
     });
 
   const confirmWithdraw = () =>
@@ -663,7 +676,11 @@ export default function Home() {
                 onClick={prepared?.kind === "deposit" ? confirmDeposit : prepareDeposit}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden />
-                {prepared?.kind === "deposit" ? "Confirm deposit" : "Deposit"}
+                {prepared?.kind === "deposit"
+                  ? needsWrap
+                    ? "Confirm — wrap and deposit"
+                    : "Confirm deposit"
+                  : "Deposit"}
               </Button>
             </div>
 
@@ -687,7 +704,7 @@ export default function Home() {
               <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent-faint px-3 py-2 text-xs text-fg">
                 <span>
                   {formatUSDC(prepared.amount)} cUSDC encrypted and ready to{" "}
-                  {prepared.kind === "deposit" ? "deposit" : "withdraw"}.
+                  {prepared.kind === "deposit" ? "deposit" : "withdraw"}. Nothing has been sent yet.
                 </span>
                 <button
                   type="button"
