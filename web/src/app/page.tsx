@@ -467,7 +467,7 @@ export default function Home() {
             ? (winnings ?? 0n) > 0n
               ? "You won. Claim your prize, and you are already entered in the next draw."
               : "Prize claimed. Deposit again to enter the next draw."
-            : "Nothing was staked and nothing was lost. Deposit again to enter the next draw."
+            : `Nothing was staked and nothing was lost. Your stub for draw #${pool.currentDrawId} is already in play.`
           : pool.openable
             ? "The draw has settled. Open your stub to see how it went."
             : sealed

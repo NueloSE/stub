@@ -127,8 +127,8 @@ export function StubCard({
                 </p>
                 <p className="mt-3 text-sm text-ink/60">Your principal never moved.</p>
                 <p className="mt-4 max-w-[30ch] text-[11px] leading-relaxed text-ink/45">
-                  You are already entered in the next draw. Nothing was staked and nothing was
-                  lost.
+                  Nothing was staked, so nothing was lost. Losing a draw costs a saver only the
+                  interest they would have earned.
                 </p>
               </>
             )}
