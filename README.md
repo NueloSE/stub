@@ -192,6 +192,23 @@ Two are ours. The token is Zama's.
 `contracts/contracts/mocks/` holds local clones of Zama's two tokens. They exist only so the
 Hardhat suite has something to run against, and are never deployed to a live network.
 
+### Getting back out
+
+Withdrawing returns principal to your wallet as confidential cUSDC. Turning that back into plain
+USDC is Zama's two-step unwrap, and the gap between the steps is the interesting part: `unwrap`
+has already burned the confidential balance, and the underlying stays in the wrapper until
+someone submits the KMS-proved amount to `finalizeUnwrap`. Close the tab in between and the
+tokens are stranded with nothing prompting you to recover them.
+
+Stub runs the flow and also goes looking for requests that never finished. A finalized request is
+deleted, so `unwrapRequester(id)` reading back non-zero means the underlying is still owed —
+`/api/pending-unwraps` scans for those and the app offers to complete them in one transaction.
+Log scanning is server-side because public RPCs routinely reject `eth_getLogs` from a browser
+origin.
+
+Verified against live Sepolia by stranding an unwrap deliberately: burn, confirm the scanner
+finds it, prove the amount through the relayer, finalize, confirm it clears.
+
 ### Liveness
 
 Sealing is permissionless and the pool total is encrypted, so nothing on-chain can stop a draw

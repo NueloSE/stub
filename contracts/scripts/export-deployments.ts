@@ -104,6 +104,15 @@ export const CONFIDENTIAL_USDC_ABI = [
   { type: "function", name: "confidentialBalanceOf", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "bytes32" }] },
   { type: "function", name: "underlying", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+  // Unwrapping is two steps. \`unwrap\` burns the confidential balance and records a request keyed
+  // by the resulting ciphertext handle; \`finalizeUnwrap\` releases the underlying once the KMS has
+  // signed off on what that ciphertext decrypts to. A request left unfinalized strands the
+  // underlying in the wrapper, which is why the app hunts for them.
+  { type: "function", name: "unwrap", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "encryptedAmount", type: "bytes32" }, { name: "inputProof", type: "bytes" }], outputs: [{ type: "bytes32" }] },
+  { type: "function", name: "finalizeUnwrap", stateMutability: "nonpayable", inputs: [{ name: "unwrapRequestId", type: "bytes32" }, { name: "unwrapAmountCleartext", type: "uint64" }, { name: "decryptionProof", type: "bytes" }], outputs: [] },
+  { type: "function", name: "unwrapRequester", stateMutability: "view", inputs: [{ name: "unwrapRequestId", type: "bytes32" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "unwrapAmount", stateMutability: "view", inputs: [{ name: "unwrapRequestId", type: "bytes32" }], outputs: [{ type: "bytes32" }] },
+  { type: "event", name: "UnwrapRequested", inputs: [{ name: "receiver", type: "address", indexed: true }, { name: "unwrapRequestId", type: "bytes32", indexed: true }, { name: "amount", type: "bytes32", indexed: false }] },
 ] as const;
 `;
 

@@ -280,6 +280,26 @@ export async function fetchSettlement(
   };
 }
 
+/**
+ * Publicly decrypt one handle and return the cleartext with the proof a contract will accept.
+ *
+ * Used to finalize an unwrap: the burn marks its amount publicly decryptable and keys the
+ * request by that very handle, so the request id and the ciphertext are the same thing.
+ */
+export async function fetchPublicValue(
+  client: FhevmClient,
+  handle: string,
+): Promise<{ value: bigint; proof: `0x${string}` }> {
+  const { clearValues, checkSignaturesArgs } = await client.decryptPublicValuesWithSignatures({
+    encryptedValues: [handle],
+  });
+  const raw = clearValues[0]?.value;
+  return {
+    value: typeof raw === "bigint" ? raw : BigInt((raw as number | string | undefined) ?? 0),
+    proof: checkSignaturesArgs.decryptionProof as `0x${string}`,
+  };
+}
+
 /** Read the publicly decryptable pool total, published at each seal. */
 export async function decryptPublic(
   client: FhevmClient,

@@ -8,6 +8,7 @@ import { sepolia } from "wagmi/chains";
 
 import { ConnectButton } from "@/components/connect";
 import { StubCard, type StubState } from "@/components/stub-card";
+import { Unwrap } from "@/components/unwrap";
 import { Steps, type StepState } from "@/components/steps";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -724,6 +725,13 @@ export default function Home() {
               than you hold sends your whole balance rather than reverting, so a transaction never
               reveals what you have by failing.
             </p>
+
+            <Unwrap
+              onDone={() => {
+                void wallet.refetch();
+                setWalletBalance(undefined);
+              }}
+            />
           </Panel>
         </div>
 
