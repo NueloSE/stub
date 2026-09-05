@@ -81,6 +81,7 @@ export default function Home() {
   const [amount, setAmount] = useState("100");
   const [balance, setBalance] = useState<bigint>();
   const [winnings, setWinnings] = useState<bigint>();
+  const [walletBalance, setWalletBalance] = useState<bigint>();
   const [outcome, setOutcome] = useState<boolean>();
   const [ticket, setTicket] = useState<bigint>();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -220,6 +221,7 @@ export default function Home() {
 
       await Promise.all([wallet.refetch(), handles.refetch(), pool.refresh()]);
       setBalance(undefined);
+      setWalletBalance(undefined);
       setNotice("Deposited. Your balance is encrypted on-chain — reveal it below.");
     });
 
@@ -239,16 +241,23 @@ export default function Home() {
 
       await Promise.all([wallet.refetch(), handles.refetch(), pool.refresh()]);
       setBalance(undefined);
+      setWalletBalance(undefined);
       setNotice("Withdrawn in full. Asking for more than you hold sends your whole balance rather than failing.");
     });
 
   const reveal = () =>
     run("reveal", async () => {
-      const handle = (await publicClient!.readContract({
-        address: POOL, abi: POOL_ABI, functionName: "confidentialBalanceOf",
-        args: [address!],
-      })) as string;
-      setBalance((await decryption.readUint(POOL, handle)) ?? 0n);
+      const [poolHandle, walletHandle] = await Promise.all([
+        publicClient!.readContract({
+          address: POOL, abi: POOL_ABI, functionName: "confidentialBalanceOf", args: [address!],
+        }) as Promise<string>,
+        publicClient!.readContract({
+          address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "confidentialBalanceOf",
+          args: [address!],
+        }) as Promise<string>,
+      ]);
+      setBalance((await decryption.readUint(POOL, poolHandle)) ?? 0n);
+      setWalletBalance((await decryption.readUint(CUSDC, walletHandle)) ?? 0n);
     });
 
   const seal = () =>
@@ -630,6 +639,22 @@ export default function Home() {
               </p>
               <p className="mt-3 break-all font-mono text-[10px] text-fg-faint">
                 {handles.balanceHandle ?? "no position yet"}
+              </p>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-ink-line bg-ink p-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
+                In your wallet
+              </p>
+              <p className="tabular mt-2 font-mono text-xl leading-none text-fg">
+                {walletBalance !== undefined ? formatUSDC(walletBalance) : "▓▓▓▓▓▓"}
+                {walletBalance !== undefined && (
+                  <span className="ml-2 text-xs text-fg-faint">cUSDC</span>
+                )}
+              </p>
+              <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+                Withdrawn principal and claimed prizes land here as confidential cUSDC — still
+                encrypted, just no longer in the pool.
               </p>
             </div>
 
