@@ -6,7 +6,15 @@ import { Lock, Ticket } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatUSDC } from "@/lib/format";
 
-export type StubState = "empty" | "waiting" | "sealed" | "opening" | "revealing" | "won" | "lost";
+export type StubState =
+  | "empty"
+  | "waiting"
+  | "sealed"
+  | "opening"
+  | "revealing"
+  | "won"
+  | "claimed"
+  | "lost";
 
 /**
  * The stub. One object with two halves, which is the whole idea:
@@ -33,7 +41,7 @@ export function StubCard({
   prize?: bigint;
   className?: string;
 }) {
-  const revealed = state === "won" || state === "lost";
+  const revealed = state === "won" || state === "claimed" || state === "lost";
 
   return (
     <div
@@ -87,20 +95,26 @@ export function StubCard({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           >
-            {state === "won" ? (
+            {state === "won" || state === "claimed" ? (
               <>
                 <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/40">
                   Your stub
                 </p>
-                <p className="mt-2 text-3xl font-medium leading-none tracking-tight text-ink">
+                <p className="mt-2 flex items-baseline gap-2 text-3xl font-medium leading-none tracking-tight text-ink">
                   You won
+                  {state === "claimed" && (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink/40">
+                      claimed
+                    </span>
+                  )}
                 </p>
                 <p className="tabular mt-3 font-mono text-xl text-ink">
                   {formatUSDC(prize)} <span className="text-sm text-ink/50">cUSDC</span>
                 </p>
                 <p className="mt-4 max-w-[30ch] text-[11px] leading-relaxed text-ink/45">
-                  Only you can read this. On-chain it is a ciphertext that looks identical to
-                  everyone else&apos;s.
+                  {state === "claimed"
+                    ? "Paid out by confidential transfer. The result stays readable only by you."
+                    : "Only you can read this. On-chain it is a ciphertext that looks identical to everyone else's."}
                 </p>
               </>
             ) : (

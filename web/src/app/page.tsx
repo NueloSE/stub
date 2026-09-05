@@ -17,7 +17,7 @@ import {
   POOL_ABI,
   USDC_ABI,
 } from "@/lib/deployments";
-import { EMPTY_HANDLE, encryptAmount, fetchSettlement } from "@/lib/fhevm";
+import { EMPTY_HANDLE, encryptAmount, fetchSettlement, type EncryptedInput } from "@/lib/fhevm";
 import { formatCountdown, formatUSDC, parseUSDC, UNIT } from "@/lib/format";
 import {
   OPERATOR_UNTIL,
@@ -82,6 +82,7 @@ export default function Home() {
   const [balance, setBalance] = useState<bigint>();
   const [winnings, setWinnings] = useState<bigint>();
   const [walletBalance, setWalletBalance] = useState<bigint>();
+  const [prepared, setPrepared] = useState<{ kind: "deposit" | "withdraw"; amount: bigint; input: EncryptedInput }>();
   const [outcome, setOutcome] = useState<boolean>();
   const [ticket, setTicket] = useState<bigint>();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -179,12 +180,19 @@ export default function Home() {
       setNotice("1,000 test USDC minted from Zama's public faucet.");
     });
 
-  const deposit = () =>
-    run("deposit", async () => {
+  /**
+   * Encrypt the amount, and stop.
+   *
+   * Deliberately separate from sending. Building the proof takes twelve seconds, and a wallet
+   * request issued after that much async is no longer attached to a user gesture — browsers and
+   * extensions suppress the prompt, which looks exactly like the app hanging. Confirming is its
+   * own click so the wallet is always called from a fresh one.
+   */
+  const prepareDeposit = () =>
+    run("encrypting", async () => {
       if (!parsed || parsed === 0n) throw new Error("Enter an amount above zero.");
       if (!decryption.client) throw new Error("The Zama SDK is still starting. Try again in a moment.");
 
-      // 1. Approve the wrapper to take the underlying.
       if (wallet.allowance < parsed) {
         setBusy("approving");
         await send({
@@ -193,14 +201,12 @@ export default function Home() {
         } as never);
       }
 
-      // 2. Wrap. This amount is public — the confidentiality boundary sits here.
       setBusy("wrapping");
       await send({
         address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "wrap",
         args: [address!, parsed], account: address!, chain: sepolia,
       } as never);
 
-      // 3. Let the pool move cUSDC on your behalf. A permission, not an amount.
       if (!wallet.isOperator) {
         setBusy("granting");
         await send({
@@ -209,36 +215,44 @@ export default function Home() {
         } as never);
       }
 
-      // 4. Encrypt in the browser. Slow on purpose — it is a real ZK proof.
       setBusy("encrypting");
-      const encrypted = await encryptAmount(decryption.client, POOL, address!, parsed);
+      const input = await encryptAmount(decryption.client, POOL, address!, parsed);
+      setPrepared({ kind: "deposit", amount: parsed, input });
+      await wallet.refetch();
+      setNotice("Encrypted. Confirm to send it to the pool.");
+    });
 
-      setBusy("depositing");
+  const confirmDeposit = () =>
+    run("depositing", async () => {
+      if (!prepared || prepared.kind !== "deposit") throw new Error("Nothing prepared.");
       await send({
         address: POOL, abi: POOL_ABI, functionName: "deposit",
-        args: [encrypted.handle, encrypted.inputProof], account: address!, chain: sepolia,
+        args: [prepared.input.handle, prepared.input.inputProof], account: address!, chain: sepolia,
       } as never);
-
+      setPrepared(undefined);
       await Promise.all([wallet.refetch(), handles.refetch(), pool.refresh()]);
       setBalance(undefined);
       setWalletBalance(undefined);
       setNotice("Deposited. Your balance is encrypted on-chain — reveal it below.");
     });
 
-  const withdraw = () =>
-    run("withdraw", async () => {
+  const prepareWithdraw = () =>
+    run("encrypting", async () => {
       if (!parsed || parsed === 0n) throw new Error("Enter an amount above zero.");
       if (!decryption.client) throw new Error("The Zama SDK is still starting. Try again in a moment.");
+      const input = await encryptAmount(decryption.client, POOL, address!, parsed);
+      setPrepared({ kind: "withdraw", amount: parsed, input });
+      setNotice("Encrypted. Confirm to take it out of the pool.");
+    });
 
-      setBusy("encrypting");
-      const encrypted = await encryptAmount(decryption.client, POOL, address!, parsed);
-
-      setBusy("withdrawing");
+  const confirmWithdraw = () =>
+    run("withdrawing", async () => {
+      if (!prepared || prepared.kind !== "withdraw") throw new Error("Nothing prepared.");
       await send({
         address: POOL, abi: POOL_ABI, functionName: "withdraw",
-        args: [encrypted.handle, encrypted.inputProof], account: address!, chain: sepolia,
+        args: [prepared.input.handle, prepared.input.inputProof], account: address!, chain: sepolia,
       } as never);
-
+      setPrepared(undefined);
       await Promise.all([wallet.refetch(), handles.refetch(), pool.refresh()]);
       setBalance(undefined);
       setWalletBalance(undefined);
@@ -345,12 +359,12 @@ export default function Home() {
   const stubState: StubState = useMemo(() => {
     if (busy === "open") return "opening";
     if (busy === "revealing") return "revealing";
-    if (outcome === true) return "won";
+    if (outcome === true) return (winnings ?? 0n) > 0n ? "won" : "claimed";
     if (outcome === false) return "lost";
     if (pool.openable) return "sealed";
     if (balance && balance > 0n) return "waiting";
     return "empty";
-  }, [busy, outcome, pool.openable, balance]);
+  }, [busy, outcome, winnings, pool.openable, balance]);
 
   const hasWrapped = Boolean(wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE);
   const hasPosition = Boolean(handles.balanceHandle && handles.balanceHandle !== EMPTY_HANDLE);
@@ -402,7 +416,9 @@ export default function Home() {
         ? "Deposit to enter the next draw."
         : outcome !== undefined
           ? outcome
-            ? "You won. Claim your prize, and you are already entered in the next draw."
+            ? (winnings ?? 0n) > 0n
+              ? "You won. Claim your prize, and you are already entered in the next draw."
+              : `Prize claimed. Your stub for draw #${pool.currentDrawId} is already in play.`
             : "You are already entered in the next draw. Nothing was staked and nothing was lost."
           : pool.openable
             ? "The draw has settled. Open your stub to see how it went."
@@ -595,13 +611,37 @@ export default function Home() {
               </div>
               <Button
                 loading={["approving", "wrapping", "granting", "encrypting", "depositing"].includes(busy ?? "")}
-                disabled={!isConnected || wrongNetwork || !parsed || shortfall}
-                onClick={deposit}
+                disabled={
+                  !isConnected ||
+                  wrongNetwork ||
+                  !parsed ||
+                  (prepared?.kind !== "deposit" && shortfall)
+                }
+                onClick={prepared?.kind === "deposit" ? confirmDeposit : prepareDeposit}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden />
-                Deposit
+                {prepared?.kind === "deposit" ? "Confirm deposit" : "Deposit"}
               </Button>
             </div>
+
+            {prepared && (
+              <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent-faint px-3 py-2 text-xs text-fg">
+                <span>
+                  {formatUSDC(prepared.amount)} cUSDC encrypted and ready to{" "}
+                  {prepared.kind === "deposit" ? "deposit" : "withdraw"}.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrepared(undefined);
+                    setNotice(undefined);
+                  }}
+                  className="text-fg-faint underline-offset-4 hover:text-fg hover:underline"
+                >
+                  discard
+                </button>
+              </p>
+            )}
 
             {shortfall && (
               <p className="mt-3 text-xs text-warn">
@@ -669,13 +709,13 @@ export default function Home() {
                 {decryption.cached ? "Reveal" : "Sign to reveal"}
               </Button>
               <Button
-                variant="ghost"
-                loading={busy === "withdraw" || busy === "withdrawing"}
+                variant={prepared?.kind === "withdraw" ? "primary" : "ghost"}
+                loading={busy === "withdrawing" || (busy === "encrypting" && prepared?.kind !== "deposit")}
                 disabled={!isConnected || wrongNetwork || !parsed}
-                onClick={withdraw}
+                onClick={prepared?.kind === "withdraw" ? confirmWithdraw : prepareWithdraw}
               >
                 <ArrowUpFromLine className="h-4 w-4" aria-hidden />
-                Withdraw
+                {prepared?.kind === "withdraw" ? "Confirm withdrawal" : "Withdraw"}
               </Button>
             </div>
 
