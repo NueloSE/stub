@@ -97,8 +97,17 @@ export default function Home() {
 
   const wrongNetwork = isConnected && chainId !== sepolia.id;
   const parsed = parseUSDC(amount);
+  /**
+   * Will this deposit have to wrap?
+   *
+   * Only if the confidential balance cannot already cover it. The balance is encrypted, so that
+   * is knowable only once revealed — and an unrevealed balance has to be assumed insufficient,
+   * because wrapping unnecessarily costs a transaction while skipping it wrongly makes the
+   * deposit fail. When it is known, the wrap and its approval are skipped entirely.
+   */
+  const needsWrap = parsed === undefined || walletBalance === undefined || walletBalance < parsed;
   /** Deposit needs the underlying in hand before it can wrap. Say so before the wallet does. */
-  const shortfall = isConnected && parsed !== undefined && parsed > wallet.usdc;
+  const shortfall = isConnected && needsWrap && parsed !== undefined && parsed > wallet.usdc;
 
   const run = useCallback(
     async (label: string, fn: () => Promise<void>) => {
@@ -194,19 +203,23 @@ export default function Home() {
       if (!parsed || parsed === 0n) throw new Error("Enter an amount above zero.");
       if (!decryption.client) throw new Error("The Zama SDK is still starting. Try again in a moment.");
 
-      if (wallet.allowance < parsed) {
-        setBusy("approving");
+      // Wrapping is only necessary when the confidential balance cannot already cover the
+      // deposit. Wrapping regardless would spend USDC to duplicate cUSDC already held.
+      if (needsWrap) {
+        if (wallet.allowance < parsed) {
+          setBusy("approving");
+          await send({
+            address: USDC, abi: USDC_ABI, functionName: "approve",
+            args: [CUSDC, parsed], account: address!, chain: sepolia,
+          } as never);
+        }
+
+        setBusy("wrapping");
         await send({
-          address: USDC, abi: USDC_ABI, functionName: "approve",
-          args: [CUSDC, parsed], account: address!, chain: sepolia,
+          address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "wrap",
+          args: [address!, parsed], account: address!, chain: sepolia,
         } as never);
       }
-
-      setBusy("wrapping");
-      await send({
-        address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "wrap",
-        args: [address!, parsed], account: address!, chain: sepolia,
-      } as never);
 
       if (!wallet.isOperator) {
         setBusy("granting");
@@ -367,7 +380,6 @@ export default function Home() {
     return "empty";
   }, [busy, outcome, winnings, pool.openable, balance]);
 
-  const hasWrapped = Boolean(wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE);
   /**
    * Having a handle is not the same as having a position. A full withdrawal leaves a perfectly
    * valid ciphertext of zero behind, so the handle alone would keep claiming you are in the next
@@ -376,21 +388,25 @@ export default function Home() {
   const hasPosition =
     Boolean(handles.balanceHandle && handles.balanceHandle !== EMPTY_HANDLE) &&
     (balance === undefined || balance > 0n);
-  const fundedEnough = parsed !== undefined && wallet.usdc >= parsed;
+  const fundedEnough = !needsWrap || (parsed !== undefined && wallet.usdc >= parsed);
 
   const depositSteps: { label: string; hint?: string; state: StepState }[] = [
     {
       label: "Get test USDC",
-      hint: "Zama's public mint — not a faucet we wrote",
+      hint: needsWrap
+        ? "Zama's public mint — not a faucet we wrote"
+        : "Not needed — you already hold enough cUSDC",
       state: busy === "faucet" ? "busy" : fundedEnough ? "done" : "active",
     },
     {
       label: "Approve and wrap into cUSDC",
-      hint: "The wrap amount is public. Everything after it is not.",
+      hint: needsWrap
+        ? "The wrap amount is public. Everything after it is not."
+        : "Skipped — your confidential balance already covers this",
       state:
         busy === "approving" || busy === "wrapping"
           ? "busy"
-          : hasWrapped
+          : !needsWrap
             ? "done"
             : fundedEnough
               ? "active"
@@ -399,7 +415,7 @@ export default function Home() {
     {
       label: "Let the pool move your cUSDC",
       hint: "One-time permission, not an amount",
-      state: busy === "granting" ? "busy" : wallet.isOperator ? "done" : hasWrapped ? "active" : "pending",
+      state: busy === "granting" ? "busy" : wallet.isOperator ? "done" : "active",
     },
     {
       label: "Deposit an encrypted amount",
@@ -409,9 +425,7 @@ export default function Home() {
           ? "busy"
           : hasPosition
             ? "done"
-            : wallet.isOperator
-              ? "active"
-              : "pending",
+            : "active",
     },
   ];
 
@@ -607,7 +621,15 @@ export default function Home() {
               <div className="relative flex-1">
                 <input
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    // The proof is bound to a specific amount. Changing the figure must throw it
+                    // away, or confirming would send the old one.
+                    if (prepared) {
+                      setPrepared(undefined);
+                      setNotice(undefined);
+                    }
+                  }}
                   inputMode="decimal"
                   placeholder="100"
                   aria-label="Amount in cUSDC"
@@ -734,6 +756,7 @@ export default function Home() {
             </p>
 
             <Unwrap
+              available={walletBalance}
               onDone={() => {
                 void wallet.refetch();
                 setWalletBalance(undefined);

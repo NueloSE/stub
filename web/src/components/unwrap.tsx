@@ -35,7 +35,7 @@ type Phase =
  * finished. The second matters more: an app that only handles its happy path leaves people
  * holding nothing with no way to ask for help.
  */
-export function Unwrap({ onDone }: { onDone: () => void }) {
+export function Unwrap({ onDone, available }: { onDone: () => void; available?: bigint }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
@@ -221,7 +221,16 @@ export function Unwrap({ onDone }: { onDone: () => void }) {
         <div className="relative flex-1">
           <input
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              // The proof is bound to an amount. Changing the figure has to discard it, or
+              // confirming would burn the amount prepared earlier.
+              if (prepared) {
+                setPrepared(undefined);
+                setPhase("idle");
+                setNotice(undefined);
+              }
+            }}
             inputMode="decimal"
             placeholder="0.00"
             aria-label="Amount to unwrap"
@@ -258,6 +267,12 @@ export function Unwrap({ onDone }: { onDone: () => void }) {
               : phase === "decrypting"
                 ? "Asking the relayer to prove the burned amount…"
                 : "Releasing the underlying…"}
+        </p>
+      )}
+      {available !== undefined && parsed !== undefined && parsed > available && phase === "idle" && (
+        <p className="mt-2 text-[11px] text-warn">
+          You hold {formatUSDC(available)} cUSDC. Asking for more burns your whole balance rather
+          than failing — the same rule as withdrawing.
         </p>
       )}
       {phase === "finalizeReady" && !error && (
