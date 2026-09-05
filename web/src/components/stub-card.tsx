@@ -79,8 +79,8 @@ export function StubCard({
         </dl>
 
         <p className="mt-6 max-w-[34ch] text-[11px] leading-relaxed text-ink/45">
-          Public. Anyone can recompute this number from the draw seed and check it was not
-          chosen for you.
+          Public, and shown without asking — anyone can recompute this number from the draw seed
+          and check it was not chosen for you.
         </p>
       </div>
 

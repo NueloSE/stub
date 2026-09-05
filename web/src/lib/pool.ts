@@ -109,6 +109,20 @@ export function usePoolState() {
   const openable = previous && previous.isSettled && !previous.isVoid ? previous : undefined;
   const openableId = openable ? currentDrawId - 1n : undefined;
 
+  /**
+   * The ticket is public. It is derived from the seed, the pool address, the draw and the
+   * account — no ciphertext involved — so it should appear as soon as the draw settles rather
+   * than waiting behind a signature. Showing the public half without being asked is what makes
+   * the sealed half mean something.
+   */
+  const { data: publicTicket } = useReadContract({
+    address: POOL,
+    abi: POOL_ABI,
+    functionName: "ticketOf",
+    args: openableId !== undefined && address ? [openableId, address] : undefined,
+    query: { enabled: openableId !== undefined && Boolean(address) },
+  });
+
   const { data: alreadyOpened, refetch: refetchOpened } = useReadContract({
     address: POOL,
     abi: POOL_ABI,
@@ -135,6 +149,8 @@ export function usePoolState() {
     openable,
     openableId,
     alreadyOpened: Boolean(alreadyOpened),
+    /** This account's ticket for the openable draw. Public, so available without asking. */
+    publicTicket: publicTicket as bigint | undefined,
     /** Live prize estimate for the next seal: accrued yield plus anything rolled over. */
     nextPrize: accruedYield + rolloverPrize,
     refresh,

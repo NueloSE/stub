@@ -475,7 +475,7 @@ export default function Home() {
           <StubCard
             state={stubState}
             drawId={pool.openableId ?? pool.currentDrawId}
-            ticket={ticket}
+            ticket={ticket ?? pool.publicTicket}
             totalAtSeal={pool.openable?.totalAtSeal}
             prize={pool.openable?.prize}
           />
