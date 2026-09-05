@@ -17,7 +17,7 @@ import {
   POOL_ABI,
   USDC_ABI,
 } from "@/lib/deployments";
-import { encryptAmount, fetchSettlement } from "@/lib/fhevm";
+import { EMPTY_HANDLE, encryptAmount, fetchSettlement } from "@/lib/fhevm";
 import { formatCountdown, formatUSDC, parseUSDC, UNIT } from "@/lib/format";
 import {
   OPERATOR_UNTIL,
@@ -273,16 +273,15 @@ export default function Home() {
     return "empty";
   }, [busy, outcome, pool.openable, balance]);
 
+  const hasWrapped = Boolean(wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE);
+  const hasPosition = Boolean(handles.balanceHandle && handles.balanceHandle !== EMPTY_HANDLE);
+  const fundedEnough = parsed !== undefined && wallet.usdc >= parsed;
+
   const depositSteps: { label: string; hint?: string; state: StepState }[] = [
     {
       label: "Get test USDC",
       hint: "Zama's public mint — not a faucet we wrote",
-      state:
-        busy === "faucet"
-          ? "busy"
-          : parsed !== undefined && wallet.usdc >= parsed
-            ? "done"
-            : "active",
+      state: busy === "faucet" ? "busy" : fundedEnough ? "done" : "active",
     },
     {
       label: "Approve and wrap into cUSDC",
@@ -290,21 +289,49 @@ export default function Home() {
       state:
         busy === "approving" || busy === "wrapping"
           ? "busy"
-          : parsed !== undefined && wallet.usdc >= parsed
-            ? "active"
-            : "pending",
+          : hasWrapped
+            ? "done"
+            : fundedEnough
+              ? "active"
+              : "pending",
     },
     {
       label: "Let the pool move your cUSDC",
-      hint: "A permission, not an amount",
-      state: wallet.isOperator ? "done" : busy === "granting" ? "busy" : "pending",
+      hint: "One-time permission, not an amount",
+      state: busy === "granting" ? "busy" : wallet.isOperator ? "done" : hasWrapped ? "active" : "pending",
     },
     {
       label: "Deposit an encrypted amount",
       hint: "Encrypted in your browser, with a proof binding it to this pool",
-      state: busy === "encrypting" || busy === "depositing" ? "busy" : "pending",
+      state:
+        busy === "encrypting" || busy === "depositing"
+          ? "busy"
+          : hasPosition
+            ? "done"
+            : wallet.isOperator
+              ? "active"
+              : "pending",
     },
   ];
+
+  /** One sentence saying what to do next. Without it the draw lifecycle is guesswork. */
+  const nextStep = !isConnected
+    ? "Connect a wallet on Sepolia to take part."
+    : wrongNetwork
+      ? "Switch to Sepolia — Stub is deployed there only."
+      : !hasPosition
+        ? "Deposit to enter the next draw."
+        : outcome !== undefined
+          ? outcome
+            ? "You won. Claim your prize, and you are already entered in the next draw."
+            : "You are already entered in the next draw. Nothing was staked and nothing was lost."
+          : pool.openable
+            ? "The draw has settled. Open your stub to see how it went."
+            : sealed
+              ? "The draw is sealed. Settle it to publish the seed — anyone can."
+              : canSeal
+                ? "The interval has elapsed. Seal the draw to start it — anyone can."
+                : `Your stub is in draw #${pool.currentDrawId}. It can be sealed in ${formatCountdown(secondsToSeal)}.`;
 
   return (
     <div className="min-h-screen">
@@ -395,7 +422,14 @@ export default function Home() {
             </div>
           )}
 
-          <p className="mt-4 text-xs text-fg-faint">
+          <p className="mt-4 text-sm text-fg">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+              Next
+            </span>{" "}
+            {nextStep}
+          </p>
+
+          <p className="mt-2 text-xs text-fg-faint">
             Not taking anyone&apos;s word for it?{" "}
             <Link
               href={`/verify/${pool.openableId ?? pool.currentDrawId}`}
