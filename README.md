@@ -217,6 +217,11 @@ npx hardhat run scripts/rehearse.ts --network localhost   # the whole product, o
 cd web && pnpm install && pnpm dev
 ```
 
+> Do not run `pnpm build` while `pnpm dev` is running. They share `.next`, and the build
+> replaces the chunks the dev server is still serving — the page then dies with
+> `__webpack_modules__[moduleId] is not a function`. Use `pnpm typecheck` to check the app while
+> dev is up. If you hit it: stop dev, `rm -rf .next`, start again.
+
 Against Sepolia, see [`docs/deploying.md`](docs/deploying.md). The short version:
 
 ```bash
