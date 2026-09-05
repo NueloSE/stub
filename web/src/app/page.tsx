@@ -98,14 +98,25 @@ export default function Home() {
   const wrongNetwork = isConnected && chainId !== sepolia.id;
   const parsed = parseUSDC(amount);
   /**
-   * Will this deposit have to wrap?
+   * Will this deposit have to wrap, and do we actually know?
    *
-   * Only if the confidential balance cannot already cover it. The balance is encrypted, so that
-   * is knowable only once revealed — and an unrevealed balance has to be assumed insufficient,
-   * because wrapping unnecessarily costs a transaction while skipping it wrongly makes the
-   * deposit fail. When it is known, the wrap and its approval are skipped entirely.
+   * Three cases, and the middle one is the awkward part of building on encrypted state:
+   *
+   *   - no cUSDC handle at all — the wallet has never held any, so a wrap is certain
+   *   - a handle but no revealed balance — genuinely unknown, and guessing wrong either way
+   *     costs something: wrapping needlessly spends USDC, skipping wrongly fails the deposit
+   *   - a revealed balance — we know, and can skip the wrap when it already covers the deposit
+   *
+   * The previous version silently assumed the worst in the middle case, so whether your deposit
+   * wrapped depended on whether you happened to have clicked Reveal first. Same action, different
+   * transactions, for a reason nobody could see. Now the unknown is surfaced instead of guessed.
    */
-  const needsWrap = parsed === undefined || walletBalance === undefined || walletBalance < parsed;
+  const holdsSomeCusdc = Boolean(
+    wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE,
+  );
+  const cusdcUnknown = holdsSomeCusdc && walletBalance === undefined;
+  const needsWrap =
+    parsed === undefined || !holdsSomeCusdc || walletBalance === undefined || walletBalance < parsed;
   /** Deposit needs the underlying in hand before it can wrap. Say so before the wallet does. */
   const shortfall = isConnected && needsWrap && parsed !== undefined && parsed > wallet.usdc;
 
@@ -400,9 +411,11 @@ export default function Home() {
     },
     {
       label: "Approve and wrap into cUSDC",
-      hint: needsWrap
-        ? "The wrap amount is public. Everything after it is not."
-        : "Skipped — your confidential balance already covers this",
+      hint: cusdcUnknown
+        ? "You already hold some cUSDC — reveal your balance to avoid wrapping twice"
+        : needsWrap
+          ? "The wrap amount is public. Everything after it is not."
+          : "Skipped — your confidential balance already covers this",
       state:
         busy === "approving" || busy === "wrapping"
           ? "busy"
@@ -653,6 +666,22 @@ export default function Home() {
                 {prepared?.kind === "deposit" ? "Confirm deposit" : "Deposit"}
               </Button>
             </div>
+
+            {cusdcUnknown && !prepared && (
+              <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
+                <span>
+                  You hold cUSDC already, but it is encrypted — depositing now would wrap more
+                  USDC on top of it.
+                </span>
+                <button
+                  type="button"
+                  onClick={reveal}
+                  className="font-medium underline underline-offset-4 hover:text-fg"
+                >
+                  Reveal to skip the wrap
+                </button>
+              </p>
+            )}
 
             {prepared && (
               <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent-faint px-3 py-2 text-xs text-fg">
