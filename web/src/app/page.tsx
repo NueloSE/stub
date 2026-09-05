@@ -368,7 +368,14 @@ export default function Home() {
   }, [busy, outcome, winnings, pool.openable, balance]);
 
   const hasWrapped = Boolean(wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE);
-  const hasPosition = Boolean(handles.balanceHandle && handles.balanceHandle !== EMPTY_HANDLE);
+  /**
+   * Having a handle is not the same as having a position. A full withdrawal leaves a perfectly
+   * valid ciphertext of zero behind, so the handle alone would keep claiming you are in the next
+   * draw after you have taken everything out. If the balance has been revealed, believe it.
+   */
+  const hasPosition =
+    Boolean(handles.balanceHandle && handles.balanceHandle !== EMPTY_HANDLE) &&
+    (balance === undefined || balance > 0n);
   const fundedEnough = parsed !== undefined && wallet.usdc >= parsed;
 
   const depositSteps: { label: string; hint?: string; state: StepState }[] = [
@@ -419,8 +426,8 @@ export default function Home() {
           ? outcome
             ? (winnings ?? 0n) > 0n
               ? "You won. Claim your prize, and you are already entered in the next draw."
-              : `Prize claimed. Your stub for draw #${pool.currentDrawId} is already in play.`
-            : "You are already entered in the next draw. Nothing was staked and nothing was lost."
+              : "Prize claimed. Deposit again to enter the next draw."
+            : "Nothing was staked and nothing was lost. Deposit again to enter the next draw."
           : pool.openable
             ? "The draw has settled. Open your stub to see how it went."
             : sealed
