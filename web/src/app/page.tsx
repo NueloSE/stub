@@ -32,19 +32,36 @@ const CUSDC = ADDRESSES.confidentialUSDC as `0x${string}`;
 const USDC = ADDRESSES.usdc as `0x${string}`;
 const FAUCET_AMOUNT = 1_000n * UNIT;
 
-/** Human-readable reasons for the failures this app can actually hit. */
+/**
+ * Turn a failure into a sentence someone can act on.
+ *
+ * The custom errors matter most. Sealing and settling are permissionless, so losing a race to
+ * another caller is a normal outcome rather than a fault — and reporting that as "transaction
+ * reverted" makes the protocol working correctly look like the protocol breaking.
+ */
 function explain(error: unknown): string {
   const raw = (error as Error)?.message ?? String(error);
-  if (/user rejected|denied transaction|rejected the request/i.test(raw)) return "Cancelled in your wallet.";
-  if (/timed out|timeout/i.test(raw)) return "Timed out waiting for confirmation. The transaction may still land — check the explorer link.";
-  if (/reverted on-chain/i.test(raw)) return raw;
-  if (/insufficient funds/i.test(raw)) return "Not enough Sepolia ETH for gas.";
+
+  if (/DrawAlreadySealed/i.test(raw))
+    return "Someone else sealed this draw first — that is sealing working as intended. It can be settled now.";
+  if (/DrawAlreadySettled/i.test(raw))
+    return "Someone else settled this draw first. Open your stub to see how it went.";
+  if (/StubAlreadyOpened/i.test(raw))
+    return "This stub is already open — reveal it rather than opening it again.";
   if (/DrawNotReady/i.test(raw)) return "The draw interval has not elapsed yet.";
+  if (/DrawNotSealed/i.test(raw)) return "That draw has not been sealed yet.";
   if (/DrawNotSettled/i.test(raw)) return "That draw has not been settled yet.";
-  if (/StubAlreadyOpened/i.test(raw)) return "This stub has already been opened.";
+  if (/DrawVoided/i.test(raw)) return "That draw was abandoned and has no result. The prize rolled into the next one.";
+  if (/SettlementWindowOpen/i.test(raw)) return "A sealed draw can only be abandoned 24 hours after sealing.";
   if (/EmptyPool/i.test(raw)) return "The pool was empty at the seal, so there is nothing to draw for.";
   if (/ERC7984UnauthorizedSpender/i.test(raw)) return "The pool is not an operator on your cUSDC yet.";
+
+  if (/user rejected|denied transaction|rejected the request/i.test(raw)) return "Cancelled in your wallet.";
+  if (/timed out|timeout/i.test(raw))
+    return "Timed out waiting for confirmation. The transaction may still land — check the explorer link.";
+  if (/insufficient funds/i.test(raw)) return "Not enough Sepolia ETH for gas.";
   if (/chain|network/i.test(raw) && /mismatch|unsupported/i.test(raw)) return "Wrong network — switch to Sepolia.";
+  if (/reverted on-chain/i.test(raw)) return raw;
   return raw.split("\n")[0].slice(0, 160);
 }
 
@@ -89,12 +106,15 @@ export default function Home() {
         await fn();
       } catch (e) {
         setError(explain(e));
+        // Losing a race means someone else advanced the draw. Re-read rather than leaving the
+        // page describing a state that is no longer true.
+        await Promise.all([pool.refresh(), wallet.refetch(), handles.refetch()]).catch(() => {});
       } finally {
         setBusy(undefined);
         setAwaitingWallet(false);
       }
     },
-    [],
+    [pool, wallet, handles],
   );
 
   /**
@@ -111,6 +131,18 @@ export default function Home() {
       if (!walletClient || !publicClient) throw new Error("Connect a wallet first.");
 
       setPendingHash(undefined);
+
+      // Ask the chain first. If it already knows this will fail — a draw someone else just
+      // sealed, a stub already opened — say so instead of spending a signature to find out.
+      try {
+        await publicClient.simulateContract(request as never);
+      } catch (simulated) {
+        const message = (simulated as Error)?.message ?? "";
+        // Only stop for failures we recognise. An unfamiliar simulation error is more likely a
+        // node quirk than a real revert, and blocking on it would be worse than trying.
+        if (/Draw|Stub|EmptyPool|ERC7984|SettlementWindow/i.test(message)) throw simulated;
+      }
+
       setAwaitingWallet(true);
       let hash: `0x${string}`;
       try {
