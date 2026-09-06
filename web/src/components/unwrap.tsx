@@ -180,17 +180,15 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
   const busy = phase !== "idle" && phase !== "ready" && phase !== "finalizeReady";
 
   return (
-    <div className="mt-4 border-t border-ink-line pt-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-        Back to plain USDC
-      </p>
+    <div className="hairline mt-5 pt-4">
+      <p className="stat-label">Back to plain USDC</p>
       <p className="mt-1 text-xs text-fg-faint">
         Two transactions. The first burns the confidential balance, the second releases the
         underlying once the amount is proved.
       </p>
 
       {pending.length > 0 && (
-        <div className="mt-3 rounded-lg border border-warn/30 bg-warn/10 p-3">
+        <div className="mt-3 rounded-field border border-warn/30 bg-warn/10 p-3.5">
           <p className="flex items-center gap-2 text-xs font-medium text-warn">
             <LifeBuoy className="h-3.5 w-3.5" aria-hidden />
             {pending.length === 1
@@ -217,8 +215,8 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
         </div>
       )}
 
-      <div className="mt-3 flex gap-2">
-        <div className="relative flex-1">
+      <div className="mt-3 flex items-center gap-2">
+        <div className="field-surface relative flex-1">
           <input
             value={amount}
             onChange={(e) => {
@@ -235,24 +233,24 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
             placeholder="0.00"
             aria-label="Amount to unwrap"
             disabled={busy}
-            className="tabular h-9 w-full rounded-lg border border-ink-line bg-ink px-3 pr-16 font-mono text-sm text-fg outline-none focus:border-accent disabled:opacity-50"
+            className="tabular h-10 w-full bg-transparent px-3.5 pr-16 font-mono text-sm outline-none disabled:opacity-50"
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-fg-faint">
+          <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-fg-faint">
             cUSDC
           </span>
         </div>
 
         {phase === "finalizeReady" && requestId && finalizeData ? (
-          <Button size="sm" loading={false} onClick={() => finalize(requestId, finalizeData)}>
+          <Button className="shrink-0" loading={false} onClick={() => finalize(requestId, finalizeData)}>
             <Unlock className="h-3.5 w-3.5" aria-hidden />
             Release {formatUSDC(finalizeData.value)}
           </Button>
         ) : phase === "ready" ? (
-          <Button size="sm" onClick={burn}>
+          <Button className="shrink-0" onClick={burn}>
             Confirm unwrap
           </Button>
         ) : (
-          <Button size="sm" variant="secondary" loading={busy} disabled={!parsed} onClick={prepare}>
+          <Button className="shrink-0" variant="secondary" loading={busy} disabled={!parsed} onClick={prepare}>
             Unwrap
           </Button>
         )}

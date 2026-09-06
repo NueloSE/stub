@@ -7,57 +7,73 @@ import { cn } from "@/lib/cn";
 export type StepState = "done" | "active" | "pending" | "busy";
 
 /**
- * The deposit path is genuinely five steps — mint, approve, wrap, grant, deposit — because a
- * public ERC-20 has to cross into a confidential one before the pool can take it. Hiding that
- * behind a single button would misrepresent where the confidentiality boundary is, and would
- * leave anyone whose transaction failed with no idea which part broke.
+ * What a deposit will do, as a checklist rather than a progress stepper.
+ *
+ * The distinction is not cosmetic. These four conditions are evaluated independently — you can
+ * already be an operator, and already hold cUSDC, while still needing the wrap. So the honest
+ * states include "satisfied, needed, satisfied, satisfied", which a numbered stepper renders as
+ * a tick, a current step, then two more ticks. That reads as a broken progress bar, because a
+ * stepper promises a single frontier between done and to-do, and there isn't one here.
+ *
+ * Dropping the numbers and the connecting rule removes the promise of sequence. What remains
+ * is the useful part the deposit path always needed: before you spend anything, you can see
+ * which transactions will actually fire.
  */
+const DESCRIPTION: Record<StepState, string> = {
+  done: "already satisfied, will be skipped",
+  active: "will run when you confirm",
+  pending: "will run once the step above is met",
+  busy: "running now",
+};
+
 export function Steps({
   steps,
 }: {
   steps: { label: string; hint?: string; state: StepState }[];
 }) {
   return (
-    <ol className="space-y-0">
-      {steps.map((step, i) => (
-        <li key={step.label} className="flex gap-3">
-          <div className="flex flex-col items-center">
-            <span
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-medium",
-                step.state === "done" && "border-won/40 bg-won-faint text-won",
-                step.state === "active" && "border-accent bg-accent-faint text-accent",
-                step.state === "busy" && "border-accent bg-accent-faint text-accent",
-                step.state === "pending" && "border-ink-line-strong text-fg-faint",
-              )}
-            >
-              {step.state === "done" ? (
-                <Check className="h-3 w-3" aria-hidden />
-              ) : step.state === "busy" ? (
-                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-              ) : (
-                i + 1
-              )}
-            </span>
-            {i < steps.length - 1 && (
+    <ol className="space-y-3.5">
+      {steps.map((step) => (
+        <li key={step.label} className="flex items-start gap-3">
+          <span
+            aria-hidden
+            className={cn(
+              "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+              step.state === "done" && "border-won/45 bg-won-faint text-won",
+              step.state === "busy" && "border-accent/60 bg-accent-faint text-accent",
+              step.state === "active" && "border-accent/60 bg-accent-faint",
+              step.state === "pending" && "border-white/15",
+            )}
+          >
+            {step.state === "done" ? (
+              <Check className="h-3 w-3" />
+            ) : step.state === "busy" ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
               <span
                 className={cn(
-                  "my-1 w-px flex-1",
-                  step.state === "done" ? "bg-won/30" : "bg-ink-line",
+                  "h-1.5 w-1.5 rounded-full",
+                  step.state === "active" ? "bg-accent" : "bg-white/25",
                 )}
               />
             )}
-          </div>
-          <div className={cn("pb-4", i === steps.length - 1 && "pb-0")}>
+          </span>
+
+          <div className="min-w-0">
             <p
               className={cn(
-                "text-sm leading-6",
-                step.state === "pending" ? "text-fg-faint" : "text-fg",
+                "text-sm leading-5",
+                // A satisfied condition has nothing for anyone to do, so it recedes.
+                step.state === "done" ? "text-fg-muted" : "text-fg",
               )}
             >
               {step.label}
+              {/* State is otherwise carried by icon shape and colour alone. */}
+              <span className="sr-only"> — {DESCRIPTION[step.state]}</span>
             </p>
-            {step.hint && <p className="mt-0.5 text-xs text-fg-faint">{step.hint}</p>}
+            {step.hint && (
+              <p className="mt-0.5 text-xs leading-relaxed text-fg-faint">{step.hint}</p>
+            )}
           </div>
         </li>
       ))}

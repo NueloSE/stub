@@ -26,3 +26,4 @@ docs/.season-4-plan.md.bak
 CLAUDE.md
 docs/season-*.md
 docs/*.bak
+*.tsbuildinfo

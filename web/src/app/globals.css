@@ -4,56 +4,376 @@
  * Stub reads as a paper ticket held against a dark room. The interface is near-black so the
  * stub itself — the one light object on the page — carries the eye. Accent is a single token,
  * so the whole identity moves by changing one line.
+ *
+ * The surfaces are built from three recipes rather than ad-hoc utility soup: `.panel` for
+ * anything that floats, `.btn-*-surface` for anything pressable, and `.hairline` for the joins
+ * between rows. Each is lit from a single implied source above the page, which is why every
+ * border is a gradient rather than a flat colour — brighter along the top edge, fading down.
+ * Getting that consistent is most of the difference between "dark theme" and "made of something".
  */
 @theme {
-  --color-ink: #08080b;
-  --color-ink-raised: #0f0f14;
-  --color-ink-line: #1c1c24;
-  --color-ink-line-strong: #2a2a35;
+  --color-ink: #07070b;
+  --color-ink-raised: #101017;
+  --color-ink-line: #1e1e28;
+  --color-ink-line-strong: #2c2c39;
 
-  --color-paper: #f5f2e8;
-  --color-paper-dim: #ddd8c8;
+  --color-paper: #f7f4ea;
+  --color-paper-dim: #e4dfcf;
   --color-paper-line: #c9c2ad;
 
-  --color-fg: #e8e8ef;
-  --color-fg-muted: #8b8b9a;
-  --color-fg-faint: #5a5a68;
+  --color-fg: #edecf2;
+  --color-fg-muted: #9a99ab;
+  --color-fg-faint: #85849b;
 
-  --color-accent: #7b6cff;
-  --color-accent-dim: #574bcc;
-  --color-accent-faint: #1a1730;
+  --color-accent: #ffdf58;
+  --color-accent-bright: #fff3a6;
+  --color-accent-dim: #d9b73c;
+  --color-accent-faint: #262004;
 
-  --color-won: #38d29a;
-  --color-won-faint: #0c2a20;
-  --color-warn: #e8a33d;
+  --color-won: #35d9a0;
+  --color-won-faint: #08251c;
+  --color-warn: #ec8b4b;
   --color-danger: #f2605c;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
 
   --radius-stub: 14px;
+  --radius-panel: 20px;
+  --radius-field: 12px;
 }
 
-* {
-  border-color: var(--color-ink-line);
+/**
+ * Material recipes. These are plain custom properties rather than `@theme` tokens because they
+ * are multi-value gradients and shadow stacks — things a utility class cannot express, and that
+ * should only ever be applied through the classes below.
+ */
+:root {
+  --shell-gutter: 0.75rem;
+
+  /* Every floating surface: a fill, a gradient hairline brighter at the top, and depth. */
+  --panel-fill: #1b1b25ed;
+  --panel-fill-solid: #1b1b25;
+  --panel-stroke: linear-gradient(180deg, #ffffff36 0%, #ffffff14 45%, #ffffff0a 100%);
+  --panel-shadow: 0 1px 0 0 #ffffff0a inset, 0 2px 24px #00000059, 0 24px 64px -32px #000000a6;
+
+  /* A groove between rows: a dark line with a light edge under it. */
+  --hairline-color: #ffffff17;
+  --hairline-highlight: inset 0 1px 0 0 #ffffff08;
+
+  /* Pressable surfaces. Fill and stroke are separate gradients so the edge catches light. */
+  --btn-primary-fill: linear-gradient(180deg, #ffeb92 0%, #ffd63f 100%);
+  --btn-primary-stroke: linear-gradient(180deg, #fffbe4 0%, #d9b73c 40%, #ab8a20 100%);
+  --btn-primary-shadow: 0 0 0 1px #ab8a20, 0 1px 0 0 #ffffff80 inset, 0 4px 10px #00000066,
+    0 14px 32px -12px #ffdf5866;
+
+  --btn-paper-fill: linear-gradient(180deg, #fffdf6 0%, #e6e1d1 100%);
+  --btn-paper-stroke: linear-gradient(180deg, #ffffff 0%, #b9b2a0 100%);
+  --btn-paper-shadow: 0 0 0 1px #00000040, 0 1px 0 0 #ffffff inset, 0 4px 10px #00000059,
+    0 14px 32px -12px #f7f4ea3d;
+
+  --btn-secondary-fill: linear-gradient(180deg, #ffffff1f 0%, #ffffff0f 100%);
+  --btn-secondary-stroke: linear-gradient(180deg, #ffffff30 0%, #ffffff12 100%);
+  --btn-secondary-shadow: 0 1px 0 0 #ffffff12 inset, 0 2px 8px #00000040;
+
+  /* Inputs read as recessed — the light edge sits along the bottom instead. */
+  --field-fill: linear-gradient(180deg, #00000059 0%, #ffffff05 100%);
+  --field-stroke: linear-gradient(180deg, #ffffff10 0%, #ffffff20 100%);
+  --field-shadow: 0 2px 8px #00000059 inset;
 }
 
-html {
-  color-scheme: dark;
-}
+@layer base {
+  html {
+    color-scheme: dark;
+  }
 
-body {
-  background: var(--color-ink);
-  color: var(--color-fg);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
+  /*
+   * One visible focus indicator for everything focusable, not just for buttons. `outline`
+   * follows each element's own border-radius, so a pill, a panel and a bare link all get a
+   * correctly-shaped ring without any per-component work.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  body {
+  /* One faint violet bloom from above centre, so the ground is not a flat void. */
+    background:
+      radial-gradient(ellipse 70% 45% at 50% -8%, #ffdf5814, transparent 70%),
+      var(--color-ink);
+    background-attachment: fixed;
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 /* Numbers that change should not reflow the layout under them. */
-.tabular {
+@utility tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
 }
+
+/**
+ * The groove between rows. A real utility rather than a plain class, because it is applied
+ * through an arbitrary variant on the verify page's spec sheet — and variants only compose
+ * with utilities.
+ */
+@utility hairline {
+  border-top: 1px solid var(--hairline-color);
+  box-shadow: var(--hairline-highlight);
+}
+
+@layer components {
+  /*
+   * The top bar spans the viewport rather than floating as a card.
+   *
+   * A sticky pill leaves a gap above and beside itself, and page content scrolls up through
+   * that gap — which reads as a rendering fault rather than as a design. Full-bleed and flush
+   * to the top edge means the only place content can go is behind the bar, where the blur
+   * handles it.
+   */
+  .chrome-bar {
+    background-color: var(--panel-fill);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border-bottom: 1px solid var(--hairline-color);
+    box-shadow: 0 1px 0 0 #ffffff0f inset, 0 10px 28px -14px #000000d9;
+  }
+
+  /*
+   * The page gutter, in one place.
+   *
+   * Header, content and footer all use this, so the brand, the panels and the footer links
+   * share a left edge at every width. The cap sits above ordinary laptop and desktop widths,
+   * so in practice the page runs nearly edge to edge and only stops sprawling on very wide
+   * displays.
+   */
+  .page-shell {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 112rem;
+    /* Phones keep a thin gutter: four times this would leave ~260px for content. */
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .page-shell {
+      padding-inline: 2.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .page-shell {
+      padding-inline: 5rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .page-shell {
+      padding-inline: 8rem;
+    }
+  }
+
+  /*
+   * Wallet dialog. Built on the native <dialog> element rather than a div-with-a-role:
+   * showModal() gives focus trapping, Escape-to-close, inertness of the page behind it and
+   * top-layer stacking for free — all things a hand-rolled modal gets wrong.
+   */
+  .dialog-surface {
+    /* Preflight zeroes margins globally, which removes the `margin: auto` the UA stylesheet
+       uses to centre a modal dialog. Put it back explicitly. */
+    margin: auto;
+    max-width: min(26rem, calc(100vw - 2rem));
+    width: 100%;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-panel);
+    background-image: linear-gradient(var(--panel-fill-solid), var(--panel-fill-solid)),
+      var(--panel-stroke);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 1px 0 0 #ffffff12 inset, 0 32px 80px -24px #000000e6;
+    color: var(--color-fg);
+    overflow: visible;
+  }
+
+  .dialog-surface::backdrop {
+    background: #04040acc;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  /* One row per wallet: a quiet target that lifts on hover rather than a button grid. */
+  .wallet-row {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.875rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-field);
+    padding: 0.75rem 0.875rem;
+    text-align: left;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .wallet-row:hover:not(:disabled) {
+    background-color: #ffffff0f;
+    border-color: #ffffff1a;
+  }
+
+  .wallet-row:disabled {
+    opacity: 0.5;
+  }
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * A floating panel. The two-layer background paints the fill inside the padding box and the
+   * stroke gradient inside the border box, which is the only way to get a gradient 1px border
+   * without a pseudo-element.
+   */
+  .panel {
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: var(--radius-panel);
+    background-image: linear-gradient(var(--panel-fill), var(--panel-fill)), var(--panel-stroke);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--panel-shadow);
+  }
+
+  /** Same edge treatment, opaque fill — for anything sitting inside a panel. */
+  .panel-inset {
+    border: 1px solid transparent;
+    border-radius: var(--radius-field);
+    background-image: linear-gradient(#0a0a10, #0a0a10), var(--panel-stroke);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 1px 0 0 #ffffff08 inset;
+  }
+
+  /* ── Pressable ──────────────────────────────────────────────────────────────────────── */
+
+  .btn-primary-surface {
+    border: 1px solid transparent;
+    background:
+      var(--btn-primary-fill) padding-box,
+      var(--btn-primary-stroke) border-box;
+    box-shadow: var(--btn-primary-shadow);
+    /* Yellow is a light surface: white text measures 1.2:1 on it. The label goes dark. */
+    color: #0d0d12;
+  }
+
+  .btn-paper-surface {
+    border: 1px solid transparent;
+    background:
+      var(--btn-paper-fill) padding-box,
+      var(--btn-paper-stroke) border-box;
+    box-shadow: var(--btn-paper-shadow);
+    color: var(--color-ink);
+  }
+
+  .btn-secondary-surface {
+    border: 1px solid transparent;
+    background:
+      var(--btn-secondary-fill) padding-box,
+      var(--btn-secondary-stroke) border-box;
+    box-shadow: var(--btn-secondary-shadow);
+    color: var(--color-fg);
+  }
+
+  /* Pressing moves the surface toward the page rather than only changing its colour. */
+  .btn-primary-surface:active:not(:disabled),
+  .btn-paper-surface:active:not(:disabled),
+  .btn-secondary-surface:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .field-surface {
+    border: 1px solid transparent;
+    border-radius: var(--radius-field);
+    background:
+      var(--field-fill) padding-box,
+      var(--field-stroke) border-box;
+    box-shadow: var(--field-shadow);
+  }
+
+  /**
+   * A focused field fills with the accent and flips its text to ink.
+   *
+   * Loud for a form, deliberately: the amounts typed here are the only numbers on the page a
+   * person chooses themselves, and everything else is dark. Amber-on-dark text at 13px was hard
+   * to read against the fill, so the contrast inverts rather than the fill being softened.
+   */
+  .field-surface:focus-within {
+    background:
+      linear-gradient(180deg, var(--color-accent-bright), var(--color-accent)) padding-box,
+      linear-gradient(180deg, var(--color-accent), var(--color-accent-dim)) border-box;
+    box-shadow: var(--field-shadow), 0 0 0 3px #ffdf582e;
+  }
+
+  /*
+   * The surface owns its own text colour rather than leaving it to a utility. A Tailwind
+   * utility sits in a later layer and was winning against the focus rule, which left pale text
+   * on the accent fill — you could not read what you were typing.
+   */
+  .field-surface input {
+    color: var(--color-fg);
+  }
+
+  .field-surface input::placeholder {
+    color: var(--color-fg-faint);
+  }
+
+  .field-surface:focus-within input,
+  .field-surface:focus-within > span {
+    color: var(--color-ink);
+  }
+
+  .field-surface:focus-within input::placeholder {
+    color: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  }
+
+  /**
+   * Browsers paint their own fill over autofilled inputs, which lands close enough to the accent
+   * to look intentional and leaves pale text on it. Force the same ink treatment rather than
+   * fighting for a different colour.
+   */
+  .field-surface input:autofill,
+  .field-surface input:-webkit-autofill {
+    -webkit-text-fill-color: var(--color-ink);
+    caret-color: var(--color-ink);
+  }
+
+  /* ── Type ───────────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * The label/figure pair used on every statistic. The contrast is carried by weight and
+   * tracking, not size alone — a tiny wide-tracked label against a large light figure.
+   */
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-fg-faint);
+  }
+
+  .stat-figure {
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+  }
+}
+
+/* ── The stub ───────────────────────────────────────────────────────────────────────── */
 
 /* The perforation down the middle of a stub. */
 .perforation {
@@ -61,6 +381,38 @@ body {
   background-size: 4px 12px;
   background-repeat: repeat-y;
   background-position: center top;
+}
+
+/**
+ * The light sweep that crosses the paper when a stub is opened. It is the only celebratory
+ * motion in the product, and it is deliberately short — the result underneath is the payload.
+ */
+@keyframes stub-sweep {
+  from {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(320%) skewX(-12deg);
+  }
+}
+
+.stub-sweep {
+  animation: stub-sweep 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Sealed ciphertext: blocks that breathe rather than a spinner, because nothing is loading. */
+@keyframes cipher-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.62;
+  }
+}
+
+.cipher-block {
+  animation: cipher-breathe 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

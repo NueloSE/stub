@@ -1,0 +1,19 @@
+<!-- Favicon variant of the admission-ticket mark: one rule instead of two, and a heavier
+     stroke, so it still reads at 16px. Kept in step with StubMark in components/shell.tsx. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0" y1="6" x2="0" y2="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fff3ad"/>
+      <stop offset="55%" stop-color="#ffdf58"/>
+      <stop offset="100%" stop-color="#e0b93f"/>
+    </linearGradient>
+    <mask id="n">
+      <rect x="4" y="9" width="24" height="15" rx="4" fill="#fff"/>
+      <circle cx="4" cy="16.5" r="2.9" fill="#000"/>
+      <circle cx="28" cy="16.5" r="2.9" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#07070b"/>
+  <rect x="4" y="9" width="24" height="15" rx="4" fill="url(#g)" mask="url(#n)"/>
+  <path d="M11 16.5h10" stroke="#07070b" stroke-width="2.4" stroke-linecap="round" opacity="0.7"/>
+</svg>

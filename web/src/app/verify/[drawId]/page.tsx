@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowLeft, Check, ExternalLink, Lock, X } from "lucide-react";
+import { Check, ExternalLink, Lock, X } from "lucide-react";
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
 import { isAddress } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 
-import { Button } from "@/components/ui/button";
+import { Chrome, Footer } from "@/components/shell";
+import { ButtonLink } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { ADDRESSES, POOL_ABI } from "@/lib/deployments";
 import { formatUSDC } from "@/lib/format";
@@ -27,12 +28,11 @@ type Draw = {
   isVoid: boolean;
 };
 
+/** A spec-sheet line. Label left, value right, with the emboss between rows carrying the join. */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 border-b border-ink-line py-3 last:border-0 sm:flex-row sm:items-baseline sm:gap-6">
-      <dt className="w-44 shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-        {label}
-      </dt>
+    <div className="flex flex-col gap-1 py-3.5 first:pt-0 last:pb-0 [&+&]:hairline sm:flex-row sm:items-baseline sm:gap-6">
+      <dt className="stat-label w-44 shrink-0 pt-0.5">{label}</dt>
       <dd className="tabular min-w-0 break-all font-mono text-sm text-fg">{children}</dd>
     </div>
   );
@@ -90,100 +90,104 @@ export default function Verify({ params }: { params: Promise<{ drawId: string }>
 
   return (
     <div className="min-h-screen">
-      <header className="mx-auto flex max-w-4xl items-center justify-between px-6 py-6">
-        <Link href="/" className="flex items-center gap-2 text-sm text-fg-muted hover:text-fg">
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          <span className="font-mono uppercase tracking-[0.24em]">Stub</span>
-        </Link>
-        <span className="font-mono text-xs text-fg-faint">no wallet required</span>
-      </header>
+      <Chrome
+        href="/"
+        subtitle="public draw record"
+        actions={
+          <>
+            <span className="hidden font-mono text-[11px] text-fg-faint sm:block">
+              no wallet required
+            </span>
+            <ButtonLink href="/app" variant="secondary">
+              Open app
+            </ButtonLink>
+          </>
+        }
+      />
 
-      <main className="mx-auto max-w-4xl px-6 pb-24">
-        <h1 className="text-3xl font-medium tracking-tight text-fg">
-          Check draw #{drawId.toString()}
-        </h1>
-        <p className="mt-3 max-w-2xl text-fg-muted">
-          Everything the draw used is on this page. The seed came from the protocol, not from the
-          operator, and it was published after the pool was frozen — so any ticket can be
-          recomputed by anyone, including you, right now.
-        </p>
+      <main id="main" tabIndex={-1} className="page-shell pt-4 sm:pt-6">
+        <section className="panel p-6 sm:p-10">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="stat-label">Draw record</span>
+            <span
+              className={`rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] ${
+                draw?.isSettled && !draw.isVoid
+                  ? "bg-won-faint text-won"
+                  : draw?.isVoid
+                    ? "bg-danger/10 text-danger"
+                    : "bg-white/5 text-fg-muted"
+              }`}
+            >
+              {status}
+            </span>
+          </div>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          {[...Array(Number(currentDrawId > 6n ? 6n : currentDrawId + 1n))].map((_, i) => {
-            const id = currentDrawId > 6n ? currentDrawId - BigInt(5 - i) : BigInt(i);
-            return (
-              <Link
-                key={id.toString()}
-                href={`/verify/${id}`}
-                className={`rounded-md border px-2.5 py-1 font-mono text-xs ${
-                  id === drawId
-                    ? "border-accent bg-accent-faint text-accent"
-                    : "border-ink-line text-fg-faint hover:text-fg"
-                }`}
-              >
-                #{id.toString()}
-              </Link>
-            );
-          })}
-        </div>
-
-        <Panel title="The draw" className="mt-6">
-          <dl>
-            <Row label="Status">{status}</Row>
-            <Row label="Sealed at block">{draw?.sealBlock ? draw.sealBlock.toString() : "—"}</Row>
-            <Row label="Pool total at seal">
-              {draw?.isSettled ? `${formatUSDC(draw.totalAtSeal)} cUSDC` : "published on settlement"}
-            </Row>
-            <Row label="Prize">{draw ? `${formatUSDC(draw.prize)} cUSDC` : "—"}</Row>
-            <Row label="Seed">
-              {draw?.isSettled && !draw.isVoid ? draw.seed.toString() : "not yet published"}
-            </Row>
-            <Row label="Seed handle">{draw?.seedHandle ?? "—"}</Row>
-          </dl>
-
-          <p className="mt-4 text-xs leading-relaxed text-fg-faint">
-            The seed is generated by <span className="font-mono">FHE.randEuint256()</span> inside
-            the protocol and marked publicly decryptable at the same moment the pool is frozen.
-            Whoever seals the draw cannot know it in advance, and everyone learns it at once.
-            Settlement verifies the KMS signatures over both the seed and the total before the
-            contract will accept either number.
+          <h1 className="mt-5 text-[2.5rem] font-medium leading-none tracking-[-0.035em] text-fg sm:text-[3.25rem]">
+            Draw #{drawId.toString()}
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-fg-muted">
+            Everything the draw used is on this page. The seed came from the protocol, not from the
+            operator, and it was published after the pool was frozen — so any ticket can be
+            recomputed by anyone, including you, right now.
           </p>
-        </Panel>
 
+          <div className="mt-7 flex flex-wrap gap-2">
+            {[...Array(Number(currentDrawId > 6n ? 6n : currentDrawId + 1n))].map((_, i) => {
+              const id = currentDrawId > 6n ? currentDrawId - BigInt(5 - i) : BigInt(i);
+              return (
+                <Link
+                  key={id.toString()}
+                  href={`/verify/${id}`}
+                  className={`rounded-full px-3 py-1.5 font-mono text-xs transition-colors ${
+                    id === drawId
+                      ? "btn-primary-surface"
+                      : "btn-secondary-surface text-fg hover:opacity-85"
+                  }`}
+                >
+                  #{id.toString()}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        {/*
+          The recomputation is the evidence, so it goes above the reference data rather than
+          below it. Someone who reads nothing else should still be able to paste an address and
+          watch two independently-derived numbers agree.
+        */}
         <Panel
           title="Recompute a ticket"
-          hint="Paste any address. This runs in your browser, from public data only."
-          className="mt-5"
+          hint="Paste any address. This runs in your browser, from public data only — nothing here trusts this page."
+          className="mt-3"
         >
-          <input
-            value={account}
-            onChange={(e) => setAccount(e.target.value.trim())}
-            placeholder="0x…"
-            spellCheck={false}
-            aria-label="Address to check"
-            className="h-10 w-full rounded-lg border border-ink-line bg-ink px-3 font-mono text-sm text-fg outline-none focus:border-accent"
-          />
+          <div className="field-surface">
+            <input
+              value={account}
+              onChange={(e) => setAccount(e.target.value.trim())}
+              placeholder="0x…"
+              spellCheck={false}
+              aria-label="Address to check"
+              className="h-11 w-full bg-transparent px-3.5 font-mono text-sm text-fg outline-none placeholder:text-fg-faint"
+            />
+          </div>
 
           {account && !valid && (
             <p className="mt-3 text-xs text-warn">That is not a valid address.</p>
           )}
 
           {valid && draw?.isSettled && !draw.isVoid && (
-            <div className="mt-4 space-y-3">
+            <div className="mt-5 space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-ink-line bg-ink p-4">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-                    Computed here
-                  </p>
-                  <p className="tabular mt-2 break-all font-mono text-lg text-fg">
+                <div className="panel-inset p-5">
+                  <p className="stat-label">Computed here, in your browser</p>
+                  <p className="tabular mt-3 break-all font-mono text-2xl font-light leading-tight text-fg">
                     {localTicket?.toString() ?? "—"}
                   </p>
                 </div>
-                <div className="rounded-lg border border-ink-line bg-ink p-4">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-                    Returned by the contract
-                  </p>
-                  <p className="tabular mt-2 break-all font-mono text-lg text-fg">
+                <div className="panel-inset p-5">
+                  <p className="stat-label">Returned by the contract</p>
+                  <p className="tabular mt-3 break-all font-mono text-2xl font-light leading-tight text-fg">
                     {(onchainTicket as bigint | undefined)?.toString() ?? "—"}
                   </p>
                 </div>
@@ -191,27 +195,34 @@ export default function Verify({ params }: { params: Promise<{ drawId: string }>
 
               {onchainTicket !== undefined && (
                 <p
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                    matches ? "bg-won-faint text-won" : "bg-danger/10 text-danger"
+                  className={`flex items-start gap-2.5 rounded-field px-4 py-3.5 text-sm leading-relaxed ${
+                    matches
+                      ? "border border-won/25 bg-won-faint text-won"
+                      : "border border-danger/30 bg-danger/10 text-danger"
                   }`}
                 >
-                  {matches ? <Check className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
+                  {matches ? (
+                    <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  ) : (
+                    <X className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  )}
                   {matches
                     ? "Identical. The contract did not choose this number for anyone."
                     : "Mismatch — this would mean the contract is not doing what it says."}
                 </p>
               )}
 
-              <div className="rounded-lg border border-ink-line bg-ink p-4">
-                <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
+              {/* The boundary, stated on the page that is otherwise all disclosure. */}
+              <div className="panel-inset p-5">
+                <p className="stat-label flex items-center gap-2">
                   <Lock className="h-3 w-3" aria-hidden />
                   What this page cannot tell you
                 </p>
-                <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+                <p className="mt-3 text-sm leading-relaxed text-fg-muted">
                   Whether this address won. The outcome is{" "}
-                  <span className="font-mono text-fg">balance &gt; ticket</span>, and the balance
-                  is a ciphertext — the comparison runs inside the protocol and the result is
-                  released to one key. That gap is the product, not a limitation of this page.
+                  <span className="font-mono text-fg">balance &gt; ticket</span>, and the balance is
+                  a ciphertext — the comparison runs inside the protocol and the result is released
+                  to one key. That gap is the product, not a limitation of this page.
                 </p>
               </div>
             </div>
@@ -224,36 +235,56 @@ export default function Verify({ params }: { params: Promise<{ drawId: string }>
           )}
         </Panel>
 
-        <Panel title="Check it yourself" className="mt-5">
-          <p className="text-sm leading-relaxed text-fg-muted">
-            Nothing above requires trusting this page. The same computation, from a terminal:
-          </p>
-          <pre className="mt-3 overflow-x-auto rounded-lg border border-ink-line bg-ink p-4 font-mono text-[11px] leading-relaxed text-fg-muted">
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <Panel title="The draw" className="min-w-0">
+            <dl>
+              <Row label="Status">{status}</Row>
+              <Row label="Sealed at block">{draw?.sealBlock ? draw.sealBlock.toString() : "—"}</Row>
+              <Row label="Pool total at seal">
+                {draw?.isSettled ? `${formatUSDC(draw.totalAtSeal)} cUSDC` : "published on settlement"}
+              </Row>
+              <Row label="Prize">{draw ? `${formatUSDC(draw.prize)} cUSDC` : "—"}</Row>
+              <Row label="Seed">
+                {draw?.isSettled && !draw.isVoid ? draw.seed.toString() : "not yet published"}
+              </Row>
+              <Row label="Seed handle">{draw?.seedHandle ?? "—"}</Row>
+            </dl>
+
+            <p className="hairline mt-5 pt-4 text-xs leading-relaxed text-fg-faint">
+              The seed is generated by <span className="font-mono">FHE.randEuint256()</span> inside
+              the protocol and marked publicly decryptable at the same moment the pool is frozen.
+              Whoever seals the draw cannot know it in advance, and everyone learns it at once.
+              Settlement verifies the KMS signatures over both the seed and the total before the
+              contract will accept either number.
+            </p>
+          </Panel>
+
+          <Panel title="Check it yourself" hint="The same computation, from a terminal." className="min-w-0">
+            <pre className="panel-inset whitespace-pre-wrap break-all p-4 font-mono text-[11px] leading-relaxed text-fg-muted">
 {`ticket = keccak256(abi.encode(seed, pool, drawId, account)) % totalAtSeal
 
 seed        ${draw?.isSettled && !draw.isVoid ? draw.seed.toString() : "<published at settlement>"}
 pool        ${POOL}
 drawId      ${drawId.toString()}
 totalAtSeal ${draw?.isSettled ? draw.totalAtSeal.toString() : "<published at settlement>"}`}
-          </pre>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <a
-              href={`https://sepolia.etherscan.io/address/${POOL}#readContract`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Button variant="secondary" size="sm">
+            </pre>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <ButtonLink
+                href={`https://sepolia.etherscan.io/address/${POOL}#readContract`}
+                variant="secondary"
+                size="sm"
+              >
                 Read the contract <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-              </Button>
-            </a>
-            <a href="https://github.com/NueloSE/stub" target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="sm">
+              </ButtonLink>
+              <ButtonLink href="https://github.com/NueloSE/stub" variant="ghost" size="sm">
                 Source <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-              </Button>
-            </a>
-          </div>
-        </Panel>
+              </ButtonLink>
+            </div>
+          </Panel>
+        </div>
       </main>
+
+      <Footer pool={POOL} yieldSource={ADDRESSES.yieldSource} />
     </div>
   );
 }
