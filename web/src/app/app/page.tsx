@@ -83,6 +83,7 @@ export default function Home() {
   const [notice, setNotice] = useState<string>();
   const [amount, setAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [wrapAmount, setWrapAmount] = useState("");
   const [balance, setBalance] = useState<bigint>();
   const [winnings, setWinnings] = useState<bigint>();
   const [walletBalance, setWalletBalance] = useState<bigint>();
@@ -120,28 +121,27 @@ export default function Home() {
   const wrongNetwork = isConnected && chainId !== sepolia.id;
   const parsed = parseUSDC(amount);
   const withdrawParsed = parseUSDC(withdrawAmount);
+  const wrapParsed = parseUSDC(wrapAmount);
   /**
-   * Will this deposit have to wrap, and do we actually know?
+   * Wrapping is its own act now, not a step hidden inside depositing.
    *
-   * Three cases, and the middle one is the awkward part of building on encrypted state:
+   * It is the one operation that crosses the confidentiality boundary — the wrapped amount is
+   * public — so it deserves to be a decision rather than something that happens on the way to
+   * somewhere else. It also makes the two directions symmetric: unwrapping was already explicit.
    *
-   *   - no cUSDC handle at all — the wallet has never held any, so a wrap is certain
-   *   - a handle but no revealed balance — genuinely unknown, and guessing wrong either way
-   *     costs something: wrapping needlessly spends USDC, skipping wrongly fails the deposit
-   *   - a revealed balance — we know, and can skip the wrap when it already covers the deposit
-   *
-   * The previous version silently assumed the worst in the middle case, so whether your deposit
-   * wrapped depended on whether you happened to have clicked Reveal first. Same action, different
-   * transactions, for a reason nobody could see. Now the unknown is surfaced instead of guessed.
+   * The cost is that depositing can now be asked for more cUSDC than is held, and the token
+   * transfers zero rather than reverting when short. That is guarded below rather than papered
+   * over by wrapping first.
    */
   const holdsSomeCusdc = Boolean(
     wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE,
   );
-  const cusdcUnknown = holdsSomeCusdc && walletBalance === undefined;
-  const needsWrap =
-    parsed === undefined || !holdsSomeCusdc || walletBalance === undefined || walletBalance < parsed;
-  /** Deposit needs the underlying in hand before it can wrap. Say so before the wallet does. */
-  const shortfall = isConnected && needsWrap && parsed !== undefined && parsed > wallet.usdc;
+  const cusdcKnown = walletBalance !== undefined;
+  const notEnoughCusdc = cusdcKnown && parsed !== undefined && parsed > walletBalance;
+  const cusdcUnknown = holdsSomeCusdc && !cusdcKnown;
+
+  /** Wrapping needs the underlying in hand. Say so before the wallet does. */
+  const wrapShortfall = isConnected && wrapParsed !== undefined && wrapParsed > wallet.usdc;
 
   const run = useCallback(
     async (label: string, fn: () => Promise<void>) => {
@@ -224,6 +224,32 @@ export default function Home() {
       setNotice("1,000 test USDC minted from Zama's public faucet.");
     });
 
+  /** Turn plain USDC into confidential cUSDC. This amount is public — it is the boundary. */
+  const wrapUsdc = () =>
+    run("wrapping", async () => {
+      if (!wrapParsed || wrapParsed === 0n) throw new Error("Enter an amount above zero.");
+      if (wrapParsed > wallet.usdc) throw new Error("That is more USDC than you hold.");
+
+      if (wallet.allowance < wrapParsed) {
+        setBusy("approving");
+        await send({
+          address: USDC, abi: USDC_ABI, functionName: "approve",
+          args: [CUSDC, wrapParsed], account: address!, chain: sepolia,
+        } as never);
+      }
+
+      setBusy("wrapping");
+      await send({
+        address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "wrap",
+        args: [address!, wrapParsed], account: address!, chain: sepolia,
+      } as never);
+
+      setWrapAmount("");
+      setWalletBalance(undefined);
+      await wallet.refetch();
+      setNotice(`Wrapped ${formatUSDC(wrapParsed)}. That amount is public; everything after it is not.`);
+    });
+
   /**
    * Encrypt, and spend nothing.
    *
@@ -242,11 +268,7 @@ export default function Home() {
 
       const input = await encryptAmount(decryption.client, POOL, address!, parsed);
       setPrepared({ kind: "deposit", amount: parsed, input });
-      setNotice(
-        needsWrap
-          ? "Encrypted. Confirming will wrap and then deposit."
-          : "Encrypted. Confirm to send it to the pool.",
-      );
+      setNotice("Encrypted. Confirm to send it to the pool. Nothing has been sent yet.");
     });
 
   /**
@@ -258,24 +280,7 @@ export default function Home() {
   const confirmDeposit = () =>
     run("depositing", async () => {
       if (!prepared || prepared.kind !== "deposit") throw new Error("Nothing prepared.");
-      const amount = prepared.amount;
-
-      if (needsWrap) {
-        if (wallet.allowance < amount) {
-          setBusy("approving");
-          await send({
-            address: USDC, abi: USDC_ABI, functionName: "approve",
-            args: [CUSDC, amount], account: address!, chain: sepolia,
-          } as never);
-        }
-
-        setBusy("wrapping");
-        await send({
-          address: CUSDC, abi: CONFIDENTIAL_USDC_ABI, functionName: "wrap",
-          args: [address!, amount], account: address!, chain: sepolia,
-        } as never);
-      }
-
+      // Wrapping happens on its own now. Depositing only ever moves cUSDC already held.
       if (!wallet.isOperator) {
         setBusy("granting");
         await send({
@@ -450,29 +455,21 @@ export default function Home() {
   const hasPosition =
     Boolean(handles.balanceHandle && handles.balanceHandle !== EMPTY_HANDLE) &&
     (balance === undefined || balance > 0n);
-  const fundedEnough = !needsWrap || (parsed !== undefined && wallet.usdc >= parsed);
-
   const depositSteps: { label: string; hint?: string; state: StepState }[] = [
     {
       label: "Get test USDC",
-      hint: needsWrap
-        ? "Zama's public mint — not a faucet we wrote"
-        : "Not needed — you already hold enough cUSDC",
-      state: busy === "faucet" ? "busy" : fundedEnough ? "done" : "active",
+      hint: "Zama's public mint — not a faucet we wrote",
+      state: busy === "faucet" ? "busy" : wallet.usdc > 0n ? "done" : "active",
     },
     {
-      label: "Approve and wrap into cUSDC",
-      hint: cusdcUnknown
-        ? "You already hold some cUSDC — reveal your balance to avoid wrapping twice"
-        : needsWrap
-          ? "The wrap amount is public. Everything after it is not."
-          : "Skipped — your confidential balance already covers this",
+      label: "Wrap it into cUSDC",
+      hint: "This amount is public. It is the only step anyone can read.",
       state:
         busy === "approving" || busy === "wrapping"
           ? "busy"
-          : !needsWrap
+          : holdsSomeCusdc
             ? "done"
-            : fundedEnough
+            : wallet.usdc > 0n
               ? "active"
               : "pending",
     },
@@ -770,7 +767,59 @@ export default function Home() {
           >
             <Steps steps={depositSteps} />
 
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+            <div className="hairline mt-6 pt-5">
+              <p className="stat-label">From plain USDC</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-faint">
+                Wrapping is the boundary. This amount is public; nothing after it is.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <div className="field-surface relative flex-1">
+                  <input
+                    value={wrapAmount}
+                    onChange={(e) => setWrapAmount(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    aria-label="Amount of USDC to wrap"
+                    className="tabular h-11 w-full bg-transparent px-3.5 pr-16 font-mono text-sm outline-none"
+                  />
+                  <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-xs text-fg-faint">
+                    USDC
+                  </span>
+                  {wallet.usdc > 0n && (
+                    <button
+                      type="button"
+                      onClick={() => setWrapAmount(toInputValue(wallet.usdc))}
+                      className="absolute right-16 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-white/[0.08] hover:text-fg"
+                    >
+                      max
+                    </button>
+                  )}
+                </div>
+                <Button
+                  className="h-11 shrink-0"
+                  variant="secondary"
+                  loading={busy === "approving" || busy === "wrapping"}
+                  disabled={!isConnected || wrongNetwork || !wrapParsed || wrapShortfall}
+                  onClick={wrapUsdc}
+                >
+                  Wrap
+                </Button>
+              </div>
+              {wrapShortfall && (
+                <p className="mt-2 text-xs text-warn">
+                  You hold {formatUSDC(wallet.usdc)} USDC. Mint more below, or lower the amount.
+                </p>
+              )}
+            </div>
+
+            <div className="hairline mt-5 pt-5">
+              <p className="stat-label">Into the pool</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-faint">
+                Only cUSDC you already hold. Encrypted before it leaves the browser.
+              </p>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <div className="field-surface relative flex-1">
                 <input
                   value={amount}
@@ -791,6 +840,18 @@ export default function Home() {
                 <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-xs text-fg-faint">
                   cUSDC
                 </span>
+                {walletBalance !== undefined && walletBalance > 0n && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAmount(toInputValue(walletBalance));
+                      if (prepared?.kind === "deposit") setPrepared(undefined);
+                    }}
+                    className="absolute right-16 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-white/[0.08] hover:text-fg"
+                  >
+                    max
+                  </button>
+                )}
               </div>
               <Button
                 className="h-11 shrink-0"
@@ -799,34 +860,15 @@ export default function Home() {
                   !isConnected ||
                   wrongNetwork ||
                   !parsed ||
-                  (prepared?.kind !== "deposit" && shortfall)
+                  (prepared?.kind !== "deposit" && notEnoughCusdc)
                 }
                 onClick={prepared?.kind === "deposit" ? confirmDeposit : prepareDeposit}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden />
-                {prepared?.kind === "deposit"
-                  ? needsWrap
-                    ? "Confirm — wrap and deposit"
-                    : "Confirm deposit"
-                  : "Deposit"}
+                {prepared?.kind === "deposit" ? "Confirm deposit" : "Deposit"}
               </Button>
             </div>
 
-            {cusdcUnknown && !prepared && (
-              <p className="mt-3 flex flex-wrap items-center gap-2 rounded-field border border-warn/30 bg-warn/10 px-3.5 py-2.5 text-xs leading-relaxed text-warn">
-                <span>
-                  You already hold cUSDC. Reveal your balance so this deposit uses it instead of
-                  wrapping more.
-                </span>
-                <button
-                  type="button"
-                  onClick={reveal}
-                  className="font-medium underline underline-offset-4 hover:text-fg"
-                >
-                  Reveal balance
-                </button>
-              </p>
-            )}
 
             {prepared && (
               <p className="mt-3 flex flex-wrap items-center gap-2 rounded-field border border-accent/30 bg-accent-faint px-3.5 py-2.5 text-xs leading-relaxed text-fg">
@@ -847,11 +889,23 @@ export default function Home() {
               </p>
             )}
 
-            {shortfall && (
+            {notEnoughCusdc && (
               <p className="mt-3 text-xs leading-relaxed text-warn">
-                {wallet.usdc === 0n
-                  ? "You have no test USDC yet — mint some below."
-                  : `You hold ${formatUSDC(wallet.usdc)} USDC and are trying to deposit ${formatUSDC(parsed)}. Mint more below, or lower the amount.`}
+                You hold {formatUSDC(walletBalance)} cUSDC — use max, or wrap more above. Depositing
+                more than you hold moves nothing rather than failing.
+              </p>
+            )}
+
+            {cusdcUnknown && !prepared && (
+              <p className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-relaxed text-fg-faint">
+                <span>Your cUSDC balance is encrypted, so this cannot check the amount fits.</span>
+                <button
+                  type="button"
+                  onClick={reveal}
+                  className="font-medium text-warn underline underline-offset-4 hover:text-fg"
+                >
+                  Reveal balance
+                </button>
               </p>
             )}
 
