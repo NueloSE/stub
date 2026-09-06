@@ -767,8 +767,8 @@ export default function Home() {
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <Panel
-            title="Deposit"
-            hint="A public token has to cross into a confidential one first. Anything already satisfied is skipped."
+            title="Get confidential USDC"
+            hint="A public token has to cross into a confidential one before the pool will take it."
             bodyClassName="flex flex-col"
           >
             <Steps steps={depositSteps} />
@@ -816,6 +816,75 @@ export default function Home() {
                   You hold {formatUSDC(wallet.usdc)} USDC. Mint more below, or lower the amount.
                 </p>
               )}
+            </div>
+
+
+            <div className="hairline mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
+              <span className="tabular font-mono text-xs text-fg-faint">
+                {formatUSDC(wallet.usdc)} USDC in wallet
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={busy === "faucet"}
+                disabled={!isConnected || wrongNetwork}
+                onClick={getTestUSDC}
+              >
+                <Droplet className="h-3.5 w-3.5" aria-hidden />
+                Get 1,000 test USDC
+              </Button>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Your position"
+            hint="Move cUSDC into the pool, back out of it, or all the way back to plain USDC."
+            bodyClassName="flex flex-col"
+          >
+            <div className="panel-inset p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="stat-label">In your wallet, outside the pool</p>
+                {wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-mr-1 -mt-1 shrink-0"
+                    loading={busy === "reveal-wallet"}
+                    disabled={!isConnected || wrongNetwork}
+                    onClick={
+                      walletBalance === undefined
+                        ? revealWallet
+                        : () => setWalletBalance(undefined)
+                    }
+                  >
+                    {walletBalance === undefined ? (
+                      <>
+                        <Eye className="h-3.5 w-3.5" aria-hidden />
+                        {decryption.cached ? "Reveal" : "Sign to reveal"}
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                        Hide
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+              <p className="tabular mt-2.5 font-mono text-2xl font-light leading-none text-fg">
+                {walletBalance !== undefined ? (
+                  <>
+                    <Scramble value={formatUSDC(walletBalance)} />
+                    <span className="ml-2 text-xs text-fg-faint">cUSDC</span>
+                  </>
+                ) : (
+                  <Cipher count={4} className="text-fg-faint" />
+                )}
+              </p>
+              <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
+                Withdrawn principal and claimed prizes land here as confidential cUSDC — still
+                encrypted, just no longer in the pool.
+              </p>
             </div>
 
             <div className="hairline mt-5 pt-5">
@@ -921,74 +990,6 @@ export default function Home() {
                 </button>
               </p>
             )}
-
-            <div className="hairline mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
-              <span className="tabular font-mono text-xs text-fg-faint">
-                {formatUSDC(wallet.usdc)} USDC in wallet
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={busy === "faucet"}
-                disabled={!isConnected || wrongNetwork}
-                onClick={getTestUSDC}
-              >
-                <Droplet className="h-3.5 w-3.5" aria-hidden />
-                Get 1,000 test USDC
-              </Button>
-            </div>
-          </Panel>
-
-          <Panel
-            title="Take it out"
-            hint="Withdraw from the pool, or turn confidential cUSDC back into plain USDC."
-            bodyClassName="flex flex-col"
-          >
-            <div className="panel-inset p-4">
-              <div className="flex items-start justify-between gap-3">
-                <p className="stat-label">In your wallet, outside the pool</p>
-                {wallet.confidentialHandle && wallet.confidentialHandle !== EMPTY_HANDLE && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-mr-1 -mt-1 shrink-0"
-                    loading={busy === "reveal-wallet"}
-                    disabled={!isConnected || wrongNetwork}
-                    onClick={
-                      walletBalance === undefined
-                        ? revealWallet
-                        : () => setWalletBalance(undefined)
-                    }
-                  >
-                    {walletBalance === undefined ? (
-                      <>
-                        <Eye className="h-3.5 w-3.5" aria-hidden />
-                        {decryption.cached ? "Reveal" : "Sign to reveal"}
-                      </>
-                    ) : (
-                      <>
-                        <EyeOff className="h-3.5 w-3.5" aria-hidden />
-                        Hide
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-              <p className="tabular mt-2.5 font-mono text-2xl font-light leading-none text-fg">
-                {walletBalance !== undefined ? (
-                  <>
-                    <Scramble value={formatUSDC(walletBalance)} />
-                    <span className="ml-2 text-xs text-fg-faint">cUSDC</span>
-                  </>
-                ) : (
-                  <Cipher count={4} className="text-fg-faint" />
-                )}
-              </p>
-              <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-                Withdrawn principal and claimed prizes land here as confidential cUSDC — still
-                encrypted, just no longer in the pool.
-              </p>
-            </div>
 
             <div className="mt-4 flex gap-2">
               <div className="field-surface relative flex-1">
