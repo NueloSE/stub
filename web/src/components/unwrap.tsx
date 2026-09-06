@@ -7,6 +7,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { sepolia } from "wagmi/chains";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 import { ADDRESSES, CONFIDENTIAL_USDC_ABI } from "@/lib/deployments";
 import { encryptAmount, fetchPublicValue, type EncryptedInput } from "@/lib/fhevm";
 import { formatUSDC, parseUSDC, toInputValue } from "@/lib/format";
@@ -35,7 +36,15 @@ type Phase =
  * finished. The second matters more: an app that only handles its happy path leaves people
  * holding nothing with no way to ask for help.
  */
-export function Unwrap({ onDone, available }: { onDone: () => void; available?: bigint }) {
+export function Unwrap({
+  onDone,
+  available,
+  className,
+}: {
+  onDone: () => void;
+  available?: bigint;
+  className?: string;
+}) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();

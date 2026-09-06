@@ -942,6 +942,7 @@ export default function Home() {
           <Panel
             title="Take it out"
             hint="Withdraw from the pool, or turn confidential cUSDC back into plain USDC."
+            bodyClassName="flex flex-col"
           >
             <div className="panel-inset p-4">
               <div className="flex items-start justify-between gap-3">
@@ -1039,6 +1040,7 @@ export default function Home() {
             </p>
 
             <Unwrap
+              className="mt-auto"
               available={walletBalance}
               onDone={() => {
                 void wallet.refetch();
