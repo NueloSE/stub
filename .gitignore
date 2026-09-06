@@ -27,3 +27,6 @@ CLAUDE.md
 docs/season-*.md
 docs/*.bak
 *.tsbuildinfo
+
+# local recordings — never commit
+video/
