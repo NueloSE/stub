@@ -9,7 +9,7 @@ import { sepolia } from "wagmi/chains";
 import { Button } from "@/components/ui/button";
 import { ADDRESSES, CONFIDENTIAL_USDC_ABI } from "@/lib/deployments";
 import { encryptAmount, fetchPublicValue, type EncryptedInput } from "@/lib/fhevm";
-import { formatUSDC, parseUSDC } from "@/lib/format";
+import { formatUSDC, parseUSDC, toInputValue } from "@/lib/format";
 import { useDecryption } from "@/lib/pool";
 
 const CUSDC = ADDRESSES.confidentialUSDC as `0x${string}`;
@@ -67,6 +67,19 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
   useEffect(() => {
     void loadPending();
   }, [loadPending]);
+
+  /** Same reasoning as the main page: a message that never leaves stops being information. */
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(undefined), 8_000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(undefined), 14_000);
+    return () => clearTimeout(t);
+  }, [error]);
 
   /** Encrypt, and stop — so the wallet is always called from a fresh click. */
   async function prepare() {
@@ -238,6 +251,19 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
           <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-fg-faint">
             cUSDC
           </span>
+          {available !== undefined && available > 0n && !busy && (
+            <button
+              type="button"
+              onClick={() => {
+                setAmount(toInputValue(available));
+                setPrepared(undefined);
+                setPhase("idle");
+              }}
+              className="absolute right-14 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-white/[0.08] hover:text-fg"
+            >
+              max
+            </button>
+          )}
         </div>
 
         {phase === "finalizeReady" && requestId && finalizeData ? (
@@ -250,7 +276,13 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
             Confirm unwrap
           </Button>
         ) : (
-          <Button className="shrink-0" variant="secondary" loading={busy} disabled={!parsed} onClick={prepare}>
+          <Button
+            className="shrink-0"
+            variant="secondary"
+            loading={busy}
+            disabled={!parsed || (available !== undefined && parsed > available)}
+            onClick={prepare}
+          >
             Unwrap
           </Button>
         )}
@@ -269,8 +301,9 @@ export function Unwrap({ onDone, available }: { onDone: () => void; available?: 
       )}
       {available !== undefined && parsed !== undefined && parsed > available && phase === "idle" && (
         <p className="mt-2 text-[11px] text-warn">
-          You hold {formatUSDC(available)} cUSDC. Asking for more burns your whole balance rather
-          than failing — the same rule as withdrawing.
+          You hold {formatUSDC(available)} cUSDC — use max. Unlike withdrawing, asking the token
+          for more than you hold burns nothing at all, so the transaction would succeed and move
+          zero.
         </p>
       )}
       {phase === "finalizeReady" && !error && (

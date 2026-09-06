@@ -21,7 +21,7 @@ import {
   USDC_ABI,
 } from "@/lib/deployments";
 import { EMPTY_HANDLE, encryptAmount, fetchSettlement, type EncryptedInput } from "@/lib/fhevm";
-import { formatCountdown, formatUSDC, parseUSDC, UNIT } from "@/lib/format";
+import { formatCountdown, formatUSDC, parseUSDC, toInputValue, UNIT } from "@/lib/format";
 import {
   OPERATOR_UNTIL,
   useDecryption,
@@ -97,6 +97,25 @@ export default function Home() {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(t);
   }, []);
+
+  /**
+   * Banners clear themselves.
+   *
+   * Nothing unset these, so a confirmation from four actions ago sat on the page describing a
+   * state that had long since moved on. Errors linger longer than confirmations because they are
+   * more likely to need reading twice.
+   */
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(undefined), 8_000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(undefined), 14_000);
+    return () => clearTimeout(t);
+  }, [error]);
 
   const wrongNetwork = isConnected && chainId !== sepolia.id;
   const parsed = parseUSDC(amount);
@@ -922,6 +941,18 @@ export default function Home() {
                 <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-fg-faint">
                   cUSDC
                 </span>
+                {balance !== undefined && balance > 0n && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWithdrawAmount(toInputValue(balance));
+                      if (prepared?.kind === "withdraw") setPrepared(undefined);
+                    }}
+                    className="absolute right-14 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-white/[0.08] hover:text-fg"
+                  >
+                    max
+                  </button>
+                )}
               </div>
               <Button
                 variant={prepared?.kind === "withdraw" ? "primary" : "secondary"}

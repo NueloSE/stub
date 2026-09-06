@@ -47,3 +47,17 @@ export function formatCountdown(seconds: number): string {
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
 }
+
+/**
+ * A balance as an exact input value, not a display value.
+ *
+ * `formatUSDC` rounds to two decimals, so typing what the screen shows can ask for slightly more
+ * than you hold. On a withdrawal that is harmless — the pool sends everything. On an unwrap it is
+ * not: the token transfers zero when the balance is short, so the transaction burns nothing and
+ * appears to do nothing. Max fills the real figure.
+ */
+export function toInputValue(value: bigint): string {
+  const whole = value / UNIT;
+  const frac = (value % UNIT).toString().padStart(DECIMALS, "0").replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole.toString();
+}
