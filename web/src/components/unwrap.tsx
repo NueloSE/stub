@@ -202,7 +202,7 @@ export function Unwrap({
   const busy = phase !== "idle" && phase !== "ready" && phase !== "finalizeReady";
 
   return (
-    <div className="hairline mt-5 pt-4">
+    <div className={cn("hairline mt-5 pt-4", className)}>
       <p className="stat-label">Back to plain USDC</p>
       <p className="mt-1 text-xs text-fg-faint">
         Two transactions. The first burns the confidential balance, the second releases the
