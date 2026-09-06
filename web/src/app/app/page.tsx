@@ -998,7 +998,7 @@ export default function Home() {
               </p>
             )}
 
-            <div className="mt-4 flex gap-2">
+            <div className="hairline mt-auto flex gap-2 pt-6">
               <div className="field-surface relative flex-1">
                 <input
                   value={withdrawAmount}
