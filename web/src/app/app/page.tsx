@@ -138,6 +138,12 @@ export default function Home() {
   );
   const cusdcKnown = walletBalance !== undefined;
   const notEnoughCusdc = cusdcKnown && parsed !== undefined && parsed > walletBalance;
+  /**
+   * No cUSDC handle at all means the wallet has never held any, which is knowable without
+   * revealing anything. Depositing from a zero balance transfers zero and reports success, so
+   * this has to be caught before the encryption rather than after two transactions.
+   */
+  const noCusdcAtAll = isConnected && !holdsSomeCusdc;
   const cusdcUnknown = holdsSomeCusdc && !cusdcKnown;
 
   /** Wrapping needs the underlying in hand. Say so before the wallet does. */
@@ -860,7 +866,7 @@ export default function Home() {
                   !isConnected ||
                   wrongNetwork ||
                   !parsed ||
-                  (prepared?.kind !== "deposit" && notEnoughCusdc)
+                  (prepared?.kind !== "deposit" && (notEnoughCusdc || noCusdcAtAll))
                 }
                 onClick={prepared?.kind === "deposit" ? confirmDeposit : prepareDeposit}
               >
@@ -886,6 +892,13 @@ export default function Home() {
                 >
                   discard
                 </button>
+              </p>
+            )}
+
+            {noCusdcAtAll && (
+              <p className="mt-3 text-xs leading-relaxed text-warn">
+                You hold no cUSDC yet. Wrap some USDC above first — the pool only accepts the
+                confidential token.
               </p>
             )}
 
