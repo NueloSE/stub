@@ -767,8 +767,8 @@ export default function Home() {
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <Panel
-            title="Get confidential USDC"
-            hint="A public token has to cross into a confidential one before the pool will take it."
+            title="The confidentiality boundary"
+            hint="Public USDC crosses into confidential cUSDC here, and back out the same way. These two amounts are the only ones anyone can read."
             bodyClassName="flex flex-col"
           >
             <Steps steps={depositSteps} />
@@ -818,6 +818,13 @@ export default function Home() {
               )}
             </div>
 
+            <Unwrap
+              available={walletBalance}
+              onDone={() => {
+                void wallet.refetch();
+                setWalletBalance(undefined);
+              }}
+            />
 
             <div className="hairline mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
               <span className="tabular font-mono text-xs text-fg-faint">
@@ -1039,15 +1046,6 @@ export default function Home() {
               than you hold sends your whole balance rather than reverting, so a transaction never
               reveals what you have by failing.
             </p>
-
-            <Unwrap
-              className="mt-auto"
-              available={walletBalance}
-              onDone={() => {
-                void wallet.refetch();
-                setWalletBalance(undefined);
-              }}
-            />
           </Panel>
         </div>
       </main>
