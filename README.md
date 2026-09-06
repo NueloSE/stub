@@ -8,11 +8,12 @@ draw is checkable by anyone. Your balance, your odds and your result are readabl
 
 | | |
 |---|---|
+| **Live app** | **https://stub-nuelos-projects.vercel.app** — open the app at [`/app`](https://stub-nuelos-projects.vercel.app/app) |
+| **Check any draw** | [`/verify/1`](https://stub-nuelos-projects.vercel.app/verify/1) — no wallet required |
 | **Network** | Ethereum Sepolia |
 | **StubPool** | [`0x586E1c4fed4238BcD4E9b197Db688BD2D450e6Fb`](https://sepolia.etherscan.io/address/0x586E1c4fed4238BcD4E9b197Db688BD2D450e6Fb#code) — verified |
 | **MockYieldSource** | [`0xAfeAdBFDaB44C1218A4b972e534F81c3DF573255`](https://sepolia.etherscan.io/address/0xAfeAdBFDaB44C1218A4b972e534F81c3DF573255#code) — verified |
 | **Token** | Zama's [`cUSDCMock`](https://sepolia.etherscan.io/address/0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639) — we deploy none |
-| **Check any draw** | `/verify/[drawId]` — no wallet required |
 | **Program** | Zama Developer Program, Mainnet Season 4 — Bounty Track |
 
 ---
